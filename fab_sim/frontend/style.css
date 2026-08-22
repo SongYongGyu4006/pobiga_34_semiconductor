@@ -1,0 +1,247 @@
+/* 반도체 공정 수율 시뮬레이터 — Industry(steel/blueprint) 토큰 기반
+   변경 지점: 게이지 길이 = --gauge-w, 예측 열 폭 = --pred-w */
+:root{
+  --bg:#f2f2f3;
+  --surface:#f2f2f3;
+  --text:#1d1f20;
+  --divider:#d9d9dc;
+
+  --n-200:#e7e7ea;
+  --n-300:#d4d4d7;
+  --n-500:#98989b;
+  --n-600:#7a7a7d;
+  --n-700:#5d5d60;
+  --n-800:#424244;
+  --n-900:#2b2b2d;
+
+  --a-100:#eaf9f7;
+  --a-400:#5fd7c7;
+  --a-500:#22c3b0;
+  --a-600:#1ba697;
+  --a-700:#158a7e;
+  --a-800:#0f6b62;
+  --a-900:#0a4a44;
+
+  --font-h:"Inter","IBM Plex Sans KR",system-ui,sans-serif;   /* 수치·라벨 */
+  --font-b:"Inter","IBM Plex Sans KR",system-ui,sans-serif;   /* 본문 */
+
+  --gauge-w:240px;   /* ← 게이지 길이 */
+  --pred-w:186px;    /* ← 공정 예측 열 폭 */
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-b);font-size:14px;font-weight:500;
+  font-feature-settings:"cv05","ss03";
+  -webkit-font-smoothing:antialiased;
+}
+code{font-family:var(--font-h);font-size:11px;letter-spacing:0}
+::selection{background:var(--a-100)}
+:focus-visible{outline:2px solid var(--a-500);outline-offset:2px}
+
+/* ── 블루프린트 등록 마크 ─────────────────────────────── */
+.panel,.stage{position:relative}
+.corner{position:absolute;width:7px;height:7px;pointer-events:none}
+.corner::before,.corner::after{content:"";position:absolute;background:var(--a-400)}
+.corner::before{left:3px;top:0;width:1px;height:7px}
+.corner::after{top:3px;left:0;height:1px;width:7px}
+.corner.tl{left:-4px;top:-4px}
+.corner.tr{right:-4px;top:-4px}
+.corner.bl{left:-4px;bottom:-4px}
+.corner.br{right:-4px;bottom:-4px}
+
+.kicker{
+  display:block;font-family:var(--font-h);font-size:11px;font-weight:600;
+  letter-spacing:.14em;color:var(--n-600);text-transform:uppercase;
+}
+
+/* ── 상단바 ───────────────────────────────────────────── */
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;
+  padding:13px 26px;border-bottom:1px solid var(--divider);
+  position:sticky;top:0;background:var(--bg);z-index:20;
+}
+.brand{display:flex;align-items:baseline;gap:12px;min-width:0}
+.brand-name{font-size:19px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.brand-sub{font-family:var(--font-h);font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--a-700);white-space:nowrap}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.badge{
+  font-family:var(--font-h);font-size:11.5px;font-weight:600;letter-spacing:.02em;
+  color:var(--a-800);background:var(--a-100);padding:3px 10px;white-space:nowrap;
+}
+.btn{
+  font-family:var(--font-h);font-size:13.5px;font-weight:600;letter-spacing:.01em;
+  color:var(--text);background:transparent;
+  border:1px solid var(--divider);border-radius:4px;
+  padding:5px 13px;cursor:pointer;transition:.15s;
+}
+.btn:hover{border-color:var(--a-500);color:var(--a-800)}
+.btn:active{border-color:var(--a-600);color:var(--a-900)}
+
+/* ── 레이아웃 ─────────────────────────────────────────── */
+.layout{
+  display:grid;grid-template-columns:minmax(0,1fr) 312px;
+  gap:20px;padding:20px 26px 64px;align-items:start;max-width:1480px;
+}
+@media (max-width:1080px){ .layout{grid-template-columns:1fr} }
+
+/* ── 공정 카드 ────────────────────────────────────────── */
+.stages{display:flex;flex-direction:column;gap:12px;min-width:0}
+.stage{border:1px solid var(--divider);background:transparent}
+
+.stage-head{
+  display:flex;align-items:center;gap:11px;
+  padding:11px 15px;cursor:pointer;user-select:none;
+}
+.stage-idx{
+  width:22px;height:22px;flex:none;background:var(--a-900);color:#fff;
+  font-family:var(--font-h);font-size:12px;font-weight:600;display:grid;place-items:center;
+}
+.stage-name{font-size:16px;font-weight:700;white-space:nowrap}
+.stage-head-out{
+  margin-left:auto;display:flex;align-items:baseline;gap:4px;
+  font-family:var(--font-h);font-size:16px;font-weight:600;color:var(--a-800);
+  font-variant-numeric:tabular-nums;
+}
+.stage-head-out em{font-style:normal;font-size:12px;font-weight:500;color:var(--n-600)}
+.stage:not(.collapsed) .stage-head-out{display:none}
+.chev{color:var(--n-500);font-size:11px;transition:transform .18s}
+.stage.collapsed .chev{transform:rotate(-90deg)}
+.stage.collapsed .stage-body{display:none}
+
+.stage-body{
+  display:grid;grid-template-columns:minmax(0,1fr) var(--pred-w);
+  border-top:1px solid var(--n-200);
+}
+@media (max-width:720px){ .stage-body{grid-template-columns:1fr} }
+
+/* ── 파라미터 행 ──────────────────────────────────────── */
+.params{padding:4px 15px 10px;min-width:0}
+.param{
+  display:grid;grid-template-columns:minmax(84px,auto) minmax(0,1fr);
+  align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--n-200);
+}
+.param:last-child{border-bottom:none}
+.param-label{display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden}
+.param-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.param-label .u{display:none}
+.param-label .mod{
+  font-family:var(--font-h);font-size:10.5px;font-weight:600;letter-spacing:.08em;
+  color:var(--a-700);flex:none;visibility:hidden;
+}
+.param.changed .mod{visibility:visible}
+
+.param-ctrl{display:flex;align-items:flex-start;justify-content:flex-end;gap:9px;min-width:0}
+.param-val{
+  font-family:var(--font-h);font-size:19px;font-weight:600;line-height:1.1;color:var(--a-800);
+  font-variant-numeric:tabular-nums;min-width:78px;text-align:right;
+}
+
+/* 게이지 — 길이는 --gauge-w, 범위(min~max)는 아래 눈금에 표기 */
+.gauge-wrap{width:var(--gauge-w);max-width:100%;min-width:64px;flex:0 1 auto}
+.gauge{position:relative;width:100%;height:18px}
+.gauge .rail{position:absolute;left:4px;right:4px;top:8px;height:2px;background:var(--n-300)}
+.gauge .fill{position:absolute;left:4px;top:8px;height:2px;background:var(--a-600);width:0}
+.gauge .ticks{
+  position:absolute;left:4px;right:4px;bottom:0;height:4px;
+  background-image:repeating-linear-gradient(90deg,var(--n-300) 0 1px,transparent 1px 25%);
+}
+.gauge-scale{
+  display:flex;justify-content:space-between;padding:1px 3px 0;
+  font-family:var(--font-h);font-size:12px;font-weight:500;letter-spacing:0;
+  color:var(--n-600);font-variant-numeric:tabular-nums;
+}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  position:absolute;left:0;top:0;width:100%;height:18px;
+  margin:0;padding:0;background:transparent;cursor:ew-resize;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:8px;height:18px;border:0;border-radius:1px;background:var(--a-800);
+}
+input[type=range]:hover::-webkit-slider-thumb{background:var(--a-900)}
+input[type=range]::-moz-range-thumb{
+  width:8px;height:18px;border:0;border-radius:1px;background:var(--a-800);
+}
+input[type=range]::-moz-range-track{background:transparent}
+
+/* 범주형 */
+.seg{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.seg button{
+  font-family:var(--font-h);font-size:13px;font-weight:600;letter-spacing:.01em;
+  padding:4px 12px;min-width:34px;cursor:pointer;border-radius:2px;
+  border:1px solid var(--divider);background:transparent;color:var(--n-600);
+  transition:.12s;
+}
+.seg button:hover{border-color:var(--a-500);color:var(--a-800)}
+.seg button.on{background:var(--a-800);border-color:var(--a-800);color:#fff}
+
+/* ── 공정 예측 열 (줄어든 게이지 공간) ───────────────── */
+.stage-pred{
+  border-left:1px solid var(--n-200);
+  padding:13px 15px 14px;display:flex;flex-direction:column;gap:7px;
+}
+@media (max-width:720px){ .stage-pred{border-left:none;border-top:1px solid var(--n-200)} }
+.pred-name{font-size:15px;font-weight:700;color:var(--n-900);line-height:1.3}
+.pred-val{display:flex;align-items:baseline;gap:4px;flex-wrap:wrap}
+.pred-val span{
+  font-family:var(--font-h);font-size:38px;font-weight:600;line-height:1;color:var(--a-800);letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;
+}
+.pred-val em{font-style:normal;font-family:var(--font-h);font-size:15px;font-weight:600;color:var(--a-700)}
+.pred-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--font-h);font-size:13px;font-weight:500;letter-spacing:.01em;color:var(--n-700);
+}
+
+.delta{font-variant-numeric:tabular-nums;color:var(--n-500)}
+.delta.up{color:var(--a-800);font-weight:700}
+.delta.down{color:var(--n-900);font-weight:700}
+
+/* ── 사이드 패널 ──────────────────────────────────────── */
+.side{position:sticky;top:78px;display:flex;flex-direction:column;gap:12px}
+.panel{border:1px solid var(--divider);padding:16px 18px 14px}
+.panel:first-child{padding:20px 18px 18px}
+
+.yield-value{display:flex;align-items:baseline;gap:4px;margin-top:8px}
+#yield-num{
+  font-family:var(--font-h);font-size:54px;font-weight:600;line-height:.9;letter-spacing:-.035em;
+  color:var(--a-800);font-variant-numeric:tabular-nums;
+}
+.yield-unit{font-family:var(--font-h);font-size:19px;font-weight:600;color:var(--a-700)}
+.yield-bar{position:relative;height:4px;background:var(--n-200);margin:18px 0 6px}
+.yield-fill{position:absolute;left:0;top:0;height:4px;width:0;background:var(--a-700);transition:width .2s}
+.yield-scale{
+  display:flex;justify-content:space-between;font-family:var(--font-h);
+  font-size:11px;font-weight:500;letter-spacing:0;color:var(--n-500);font-variant-numeric:tabular-nums;
+}
+.yield-foot{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-top:14px;padding-top:11px;border-top:1px solid var(--n-200);
+  font-family:var(--font-h);font-size:13px;font-weight:500;color:var(--n-700);
+}
+
+.summary{list-style:none;margin-top:8px}
+.summary li{
+  display:grid;grid-template-columns:16px minmax(0,1fr) auto;
+  align-items:baseline;gap:9px;padding:7px 0;border-bottom:1px solid var(--n-200);
+}
+.summary li:last-child{border-bottom:none}
+.summary .s-idx{font-family:var(--font-h);font-size:11px;font-weight:600;color:var(--n-500);font-variant-numeric:tabular-nums}
+.summary .s-name{font-size:13px;font-weight:500;color:var(--n-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.summary .s-out{display:flex;align-items:baseline;gap:4px}
+.summary .s-val{font-family:var(--font-h);font-size:15px;font-weight:600;color:var(--a-800);font-variant-numeric:tabular-nums}
+.summary .s-unit{font-family:var(--font-h);font-size:12px;font-weight:500;color:var(--n-500);min-width:48px}
+
+
+/* ── 로딩 ─────────────────────────────────────────────── */
+.loading{
+  position:fixed;bottom:20px;right:20px;
+  background:var(--a-900);color:#fff;
+  font-family:var(--font-h);font-size:12px;font-weight:600;letter-spacing:.02em;
+  padding:7px 14px;transition:.2s;
+}
+.hidden{opacity:0;pointer-events:none}
