@@ -7,17 +7,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=23">
 </head>
 <body>
 
 <header class="topbar">
   <div class="brand">
+    <img class="brand-logo" src="/static/posco.png?v=15" alt="POSCO">
     <span class="brand-name">반도체 공정 수율 시뮬레이터</span>
     <span class="brand-sub">PROCESS YIELD SIM</span>
   </div>
   <div class="topbar-right">
-    <span id="mode-badge" class="badge">—</span>
     <button id="reset-btn" class="btn">기본값으로</button>
   </div>
 </header>
@@ -26,7 +26,7 @@
   <section id="stages" class="stages"><!-- JS가 채움 --></section>
 
   <aside class="side">
-    <div class="panel">
+    <div class="panel panel-yield">
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
       <span class="kicker">TOTAL YIELD · 예측 수율</span>
       <div class="yield-value">
@@ -38,9 +38,21 @@
         <span id="yield-base">기본값 —</span>
         <span id="yield-delta" class="delta">—</span>
       </div>
+      <div class="yield-stats">
+        <div class="stat">
+          <span class="stat-label">웨이퍼당 예상 결함 Die</span>
+          <div class="stat-val"><b id="defect-num">--</b></div>
+          <span class="stat-foot" id="defect-base">기준 —</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">공정 이탈 점수</span>
+          <div class="stat-val"><b id="sigma-num">--</b><em>σ</em></div>
+          <span class="stat-foot">|Z| 평균, 0 = 공정 중심</span>
+        </div>
+      </div>
     </div>
 
-    <div class="panel">
+    <div class="panel panel-summary">
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
       <span class="kicker">공정별 예측 결과</span>
       <ul id="summary-list" class="summary"></ul>
@@ -51,6 +63,6 @@
 
 <div id="loading" class="loading hidden">계산 중</div>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=23"></script>
 </body>
 </html>

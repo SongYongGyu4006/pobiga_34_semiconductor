@@ -7,12 +7,15 @@
 
 const API = "";                 // 같은 서버에서 서빙
 const DEBOUNCE_MS = 120;
+// 더미: 실제 웨이퍼 다이 수가 아님. 결함 개수 표시용으로만 사용.
+const WAFER_DIES = 533;
 
 let schema = null;
 let params = {};                // {key: value}
 let defaults = {};
 let baselineYield = null;
 let baselineStage = {};         // {stage_id: value}
+let baselineDefects = null;
 let timer = null;
 let inflight = null;
 
@@ -23,9 +26,6 @@ async function init() {
 
   defaults = boot.params;
   params = { ...boot.params };
-
-  document.getElementById("mode-badge").textContent =
-    `yield input: ${schema.meta.yield_input_mode}`;
 
   renderStages();
 
@@ -149,17 +149,44 @@ function buildParam(p) {
           <span>${fmt(p.min, dec)}</span><span>${fmt(p.max, dec)}</span>
         </div>
       </div>
-      <span class="param-val" data-val="${p.key}">${fmt(p.default, dec)}</span>
+      <div class="num-wrap">
+        <input type="text" inputmode="decimal" class="param-val" data-val="${p.key}"
+               value="${toInput(p.default, dec)}" aria-label="${p.name} 값" autocomplete="off" spellcheck="false">
+        <div class="num-spin">
+          <button type="button" class="spin-up" tabindex="-1" aria-label="${p.name} 증가">
+            <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M5 1.2 9 5.2H1z"/></svg>
+          </button>
+          <button type="button" class="spin-dn" tabindex="-1" aria-label="${p.name} 감소">
+            <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M5 4.8 9 .8H1z"/></svg>
+          </button>
+        </div>
+      </div>
     </div>`;
 
-  const input = wrap.querySelector("input");
+  const range = wrap.querySelector("input[type=range]");
+  const num = wrap.querySelector("input.param-val");
   const fill = wrap.querySelector(".fill");
   paintFill(fill, p, p.default);
-  input.oninput = () => {
-    const v = parseFloat(input.value);
-    paintFill(fill, p, v);
-    setParam(p, v, wrap);
+
+  range.oninput = () => applyNumeric(p, wrap, parseFloat(range.value));
+
+  num.addEventListener("focus", () => num.select());
+
+  num.oninput = () => {
+    const parsed = parseLoose(num.value);
+    if (parsed === null || parsed < p.min || parsed > p.max) return;
+    applyNumeric(p, wrap, parsed, false);
   };
+
+  num.onblur = () => commitNumber(p, wrap);
+  num.onkeydown = e => {
+    if (e.key === "Enter") num.blur();
+    if (e.key === "ArrowUp") { e.preventDefault(); nudge(p, wrap, 1); }
+    if (e.key === "ArrowDown") { e.preventDefault(); nudge(p, wrap, -1); }
+  };
+
+  bindSpin(wrap.querySelector(".spin-up"), p, wrap, 1);
+  bindSpin(wrap.querySelector(".spin-dn"), p, wrap, -1);
   return wrap;
 }
 
@@ -172,12 +199,60 @@ function paintFill(fill, p, value) {
 // ------------------------------------------------------------------ 상태 변경
 function setParam(p, value, wrap) {
   params[p.key] = value;
-
-  const label = wrap.querySelector(`[data-val="${p.key}"]`);
-  if (label) label.textContent = fmt(value, decimals(p.step));
   wrap.classList.toggle("changed", String(value) !== String(defaults[p.key]));
-
   schedulePredict();
+}
+
+function applyNumeric(p, wrap, value, rewrite = true) {
+  const v = clampRange(p, value);
+  const num = wrap.querySelector("input.param-val");
+  const range = wrap.querySelector("input[type=range]");
+  const fill = wrap.querySelector(".fill");
+  if (rewrite) num.value = toInput(v, decimals(p.step));
+  range.value = v;
+  paintFill(fill, p, v);
+  setParam(p, v, wrap);
+}
+
+function nudge(p, wrap, dir) {
+  const num = wrap.querySelector("input.param-val");
+  const cur = parseLoose(num.value);
+  const base = cur === null ? params[p.key] : cur;
+  const next = Number((base + dir * p.step).toFixed(decimals(p.step)));
+  applyNumeric(p, wrap, next);
+}
+
+function bindSpin(btn, p, wrap, dir) {
+  let hold, repeat;
+  const stop = () => { clearTimeout(hold); clearInterval(repeat); };
+  btn.addEventListener("mousedown", e => e.preventDefault());
+  btn.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    nudge(p, wrap, dir);
+    hold = setTimeout(() => { repeat = setInterval(() => nudge(p, wrap, dir), 50); }, 380);
+  });
+  btn.addEventListener("pointerup", stop);
+  btn.addEventListener("pointerleave", stop);
+  btn.addEventListener("pointercancel", stop);
+}
+
+function commitNumber(p, wrap) {
+  const parsed = parseLoose(wrap.querySelector("input.param-val").value);
+  applyNumeric(p, wrap, parsed === null ? params[p.key] : parsed);
+}
+
+function parseLoose(raw) {
+  const n = parseFloat(String(raw).replace(/,/g, "").trim());
+  return isFinite(n) ? n : null;
+}
+
+function clampRange(p, n) {
+  if (!isFinite(n)) return p.default;
+  return Math.min(p.max, Math.max(p.min, n));
+}
+
+function toInput(v, d) {
+  return Number(v).toFixed(d);
 }
 
 function schedulePredict() {
@@ -230,6 +305,7 @@ function applyPrediction(data) {
   set("#yield-num", fmt(y.value, 2));
   document.getElementById("yield-fill").style.width = `${y.ratio * 100}%`;
   updateDelta(y.value);
+  updateYieldExtras(y.value);
 }
 
 function set(sel, text) {
@@ -239,12 +315,47 @@ function set(sel, text) {
 
 function updateDelta(value) {
   const el = document.getElementById("yield-delta");
+  const panel = document.querySelector(".panel-yield");
   if (baselineYield === null) { el.textContent = "—"; return; }
   const d = value - baselineYield;
-  el.className = "delta " + (d > 0.005 ? "up" : d < -0.005 ? "down" : "");
+  const down = d < -0.005;
+  el.className = "delta " + (d > 0.005 ? "up" : down ? "down" : "");
   el.textContent = Math.abs(d) < 0.005
     ? "동일"
     : `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(2)}%p`;
+  if (panel) panel.classList.toggle("is-down", down);
+}
+
+function diesFromYield(y) {
+  // 더미: 수율로 불량 다이를 역산. 실측 결함 데이터가 아님.
+  const rate = Math.max(0, Math.min(100, y)) / 100;
+  const good = Math.round(WAFER_DIES * rate);
+  return { defect: WAFER_DIES - good, total: WAFER_DIES };
+}
+
+function processSigma() {
+  // 더미: 파라미터 기본값 대비 이탈을 σ처럼 보이게 스케일한 값.
+  if (!schema) return 0;
+  let acc = 0, n = 0;
+  schema.stages.forEach(s => {
+    s.params.forEach(p => {
+      if (p.type !== "number") return;
+      const span = p.max - p.min || 1;
+      const cur = params[p.key] ?? p.default;
+      acc += Math.abs((cur - defaults[p.key]) / span);
+      n++;
+    });
+  });
+  return n ? acc / n * 2.5 : 0;
+}
+
+function updateYieldExtras(yieldValue) {
+  // 더미: 기준 결함 개수(예: 217)는 초기 스텁 수율에서 계산됨.
+  const { defect } = diesFromYield(yieldValue);
+  if (baselineDefects === null) baselineDefects = defect;
+  set("#defect-num", String(defect));
+  set("#defect-base", `기준 ${baselineDefects}개`);
+  set("#sigma-num", processSigma().toFixed(2));
 }
 
 function reset() {
