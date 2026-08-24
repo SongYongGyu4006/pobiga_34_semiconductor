@@ -216,6 +216,133 @@ class Pipeline:
         }
 
 
+    # ------------------------------------------- 3개 라인 동시 운용 경로 조합
+    def recommend_set(self, params: Dict[str, Any],
+                      from_stage: Optional[str] = None,
+                      lanes: Optional[List[str]] = None,
+                      top_n: int = 3) -> Dict[str, Any]:
+        """
+        세 챔버를 동시에 운용한다는 전제로, 서로 챔버가 겹치지 않는
+        경로 3개의 조합을 찾는다.
+
+        from_stage : 이 공정부터 재탐색한다. 그 앞 공정의 챔버 배정은
+                     lanes(현재 조합)를 그대로 유지한다.
+        lanes      : 현재 세 라인의 전체 경로 문자열 목록 (예: ["1-2-1-2", ...])
+                     없으면 라인 l 이 모든 앞 공정에서 챔버 l 을 쓰는 것으로 본다.
+
+        제약 : 재탐색 구간의 각 공정에서 세 경로의 챔버가 모두 달라야 한다
+        목적 : 세 경로 예측 수율의 평균 최대화
+        """
+        base = self.merge(params)
+        chambers = self.chamber_stages()
+        opts = [c["options"] for c in chambers]
+        n = len(opts[0])
+
+        if any(len(o) != n for o in opts):
+            return {"ok": False,
+                    "reason": "공정마다 챔버 개수가 달라 겹치지 않는 조합을 만들 수 없습니다."}
+
+        # ---- 재탐색 시작 지점 ----
+        ids = [c["stage"] for c in chambers]
+        if from_stage in ids:
+            k = ids.index(from_stage)
+        elif from_stage:
+            # 독립 챔버가 없는 공정(이온 주입) → 연동된 마지막 챔버 공정 기준
+            order = {st["id"]: st["order"] for st in self.stages}
+            cand = [i for i, c in enumerate(chambers)
+                    if order[c["stage"]] <= order.get(from_stage, 0)]
+            k = cand[-1] if cand else 0
+        else:
+            k = 0
+
+        # ---- 앞 공정 고정 구간 ----
+        cur_lanes = None
+        if lanes and len(lanes) == n:
+            try:
+                cur_lanes = [str(x).split("-") for x in lanes]
+                if any(len(p) != len(chambers) for p in cur_lanes):
+                    cur_lanes = None
+            except Exception:  # noqa: BLE001
+                cur_lanes = None
+
+        if k == 0:
+            # 첫 공정은 라인 식별자로 고정 (라인 l = 산화 챔버 l)
+            prefix = [[opts[0][l]] for l in range(n)]
+            k = 1
+        elif cur_lanes:
+            prefix = [cur_lanes[l][:k] for l in range(n)]
+        else:
+            prefix = [[opts[i][l] for i in range(k)] for l in range(n)]
+
+        tail_opts = opts[k:]
+
+        # ---- 필요한 전체 경로만 배치 예측 ----
+        need = set()
+        for l in range(n):
+            for tail in itertools.product(*tail_opts):
+                need.add(tuple(prefix[l]) + tail)
+        need = sorted(need)
+
+        rows = []
+        for path in need:
+            r = dict(base)
+            for c, v in zip(chambers, path):
+                r[c["key"]] = v
+            rows.append(r)
+
+        df = self.run_frame(rows).reset_index(drop=True)
+        ymap = {p: float(df.loc[i, "yield_rate"]) for i, p in enumerate(need)}
+        tmap = {p: float(df.loc[i, "Target"]) for i, p in enumerate(need)}
+
+        # ---- 재탐색 구간의 순열 조합 전수 탐색 ----
+        perm_space = [list(itertools.permutations(o)) for o in tail_opts]
+        results = []
+        for perms in itertools.product(*perm_space):
+            lane_paths, total = [], 0.0
+            for l in range(n):
+                path = tuple(prefix[l]) + tuple(p[l] for p in perms)
+                total += ymap[path]
+                lane_paths.append(path)
+            results.append((total / n, lane_paths))
+        results.sort(key=lambda x: x[0], reverse=True)
+
+        def pack(avg, lane_paths, rank):
+            return {
+                "rank": rank,
+                "avg_yield": round(avg, 3),
+                "min_yield": round(min(ymap[p] for p in lane_paths), 3),
+                "lanes": [{
+                    "lane": lane_paths[i][0],
+                    "path": "-".join(lane_paths[i]),
+                    "fixed": list(lane_paths[i][:k]),
+                    "searched": list(lane_paths[i][k:]),
+                    "chambers": {c["key"]: v for c, v in zip(chambers, lane_paths[i])},
+                    "yield": round(ymap[lane_paths[i]], 3),
+                    "target": round(tmap[lane_paths[i]], 2),
+                } for i in range(n)],
+            }
+
+        top = [pack(a, lp, i + 1) for i, (a, lp) in enumerate(results[:top_n])]
+        cur_path = tuple(str(base[c["key"]]) for c in chambers)
+
+        return {
+            "ok": True,
+            "stages": [{"stage": c["stage"], "name": c["name"],
+                        "key": c["key"], "options": c["options"]} for c in chambers],
+            "mirrors": [{"key": d, "source": s} for d, s in self._mirror.items()],
+            "locked_upto": k,
+            "locked_stages": [c["name"] for c in chambers[:k]],
+            "search_stages": [c["name"] for c in chambers[k:]],
+            "paths_evaluated": len(need),
+            "sets_evaluated": len(results),
+            "current": {"path": "-".join(cur_path),
+                        "yield": round(ymap.get(cur_path, float("nan")), 3)
+                        if cur_path in ymap else None},
+            "best": top[0] if top else None,
+            "top": top,
+        }
+
+
 def _scale(value: float, rng: List[float]) -> float:
     lo, hi = rng
     if hi == lo:

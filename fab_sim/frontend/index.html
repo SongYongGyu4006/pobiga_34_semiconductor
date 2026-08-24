@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=33">
+<link rel="stylesheet" href="/static/style.css?v=41">
 </head>
 <body>
 
@@ -54,26 +54,26 @@
 
     <div class="panel panel-route">
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-      <span class="kicker">챔버 경로 추천</span>
+      <span class="kicker">챔버 최적 경로 조합</span>
       <p class="route-scope" id="route-scope">—</p>
 
+      <div class="route-map" id="route-map"></div>
+
+      <ul class="lane-list" id="lane-list"></ul>
+
       <div class="route-box">
+        <div class="route-line">
+          <span class="route-tag">평균</span>
+          <span class="route-path" id="set-avg">—</span>
+          <span class="route-yield" id="set-min">—</span>
+        </div>
         <div class="route-line">
           <span class="route-tag">현재</span>
           <span class="route-path" id="route-cur">—</span>
           <span class="route-yield" id="route-cur-y">—</span>
         </div>
-        <div class="route-line best">
-          <span class="route-tag">추천</span>
-          <span class="route-path" id="route-best">—</span>
-          <span class="route-yield" id="route-best-y">—</span>
-        </div>
-        <div class="route-gain" id="route-gain">—</div>
       </div>
 
-      <button id="route-apply" class="route-btn" disabled>추천 경로 적용</button>
-
-      <ul class="route-list" id="route-list"></ul>
       <p class="route-foot" id="route-foot">—</p>
     </div>
 
@@ -88,6 +88,6 @@
 
 <div id="loading" class="loading hidden">계산 중</div>
 
-<script src="/static/app.js?v=33"></script>
+<script src="/static/app.js?v=41"></script>
 </body>
 </html>

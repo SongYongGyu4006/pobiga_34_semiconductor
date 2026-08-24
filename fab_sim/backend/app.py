@@ -51,6 +51,13 @@ class RecommendRequest(BaseModel):
     top_n: int = 5
 
 
+class RouteSetRequest(BaseModel):
+    params: Dict[str, Any] = {}
+    from_stage: str | None = None       # 이 공정부터 재탐색
+    lanes: list[str] | None = None      # 현재 세 라인의 경로 (앞 공정 고정용)
+    top_n: int = 3
+
+
 @app.get("/api/schema")
 def get_schema():
     """프론트가 UI 를 그리기 위해 읽는 설정. 숨김 공정은 제외."""
@@ -74,6 +81,12 @@ def predict(req: PredictRequest):
 def recommend(req: RecommendRequest):
     """from_stage 이후 공정의 챔버 조합을 전수 탐색해 수율 순으로 반환."""
     return pipeline.recommend(req.params, req.from_stage, req.top_n)
+
+
+@app.post("/api/routeset")
+def routeset(req: RouteSetRequest):
+    """세 라인을 동시 운용한다는 전제로 챔버가 겹치지 않는 최적 경로 조합을 반환."""
+    return pipeline.recommend_set(req.params, req.from_stage, req.lanes, req.top_n)
 
 
 @app.post("/api/reload")

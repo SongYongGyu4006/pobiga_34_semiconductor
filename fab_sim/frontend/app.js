@@ -47,7 +47,6 @@ async function init() {
   syncMirrors();
   applyPrediction(boot.prediction);
   document.getElementById("reset-btn").onclick = reset;
-  document.getElementById("route-apply").onclick = applyRoute;
   scheduleRoute();
 }
 
@@ -363,7 +362,9 @@ async function predict() {
   }
 }
 
-// ------------------------------------------------------------------ 챔버 경로 추천
+// ------------------------------------------------------------------ 챔버 경로 조합
+const LANE_COLORS = ["var(--a-800)", "var(--a-500)", "var(--n-700)"];
+
 function scheduleRoute() {
   clearTimeout(routeTimer);
   routeTimer = setTimeout(fetchRoute, 350);
@@ -373,10 +374,16 @@ async function fetchRoute() {
   if (routeInflight) routeInflight.abort();
   routeInflight = new AbortController();
   try {
-    const res = await fetch(`${API}/api/recommend`, {
+    const res = await fetch(`${API}/api/routeset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ params, from_stage: lastStage, top_n: 5 }),
+      body: JSON.stringify({
+        params,
+        from_stage: lastStage,
+        lanes: lastRoute && lastRoute.ok
+          ? lastRoute.best.lanes.map(l => l.path) : null,
+        top_n: 3,
+      }),
       signal: routeInflight.signal,
     });
     renderRoute(await res.json());
@@ -389,57 +396,97 @@ async function fetchRoute() {
 
 function renderRoute(r) {
   lastRoute = r;
-  const names = r.stages.map(s => s.name).join(" → ");
-  set("#route-scope",
-      `${r.from_stage_name} 이후 ${r.stages.length}개 공정 · ${r.searched}개 경로 탐색`
-      + (r.fixed.length ? `\n이전 공정 고정: ${r.fixed_path}` : ""));
-
-  set("#route-cur", r.current.path || "—");
-  set("#route-cur-y", r.current.yield === null ? "—" : `${fmt(r.current.yield, 2)}%`);
+  if (!r.ok) { set("#route-scope", r.reason || "조합을 만들 수 없습니다."); return; }
 
   const best = r.best;
-  set("#route-best", best ? best.path : "—");
-  set("#route-best-y", best ? `${fmt(best.yield, 2)}%` : "—");
+  const locked = r.locked_stages.length
+    ? `${r.locked_stages.map(shortStage).join(" · ")} 고정 · ` : "";
+  set("#route-scope",
+      `${locked}${r.search_stages.map(shortStage).join(" · ")} 재탐색 · `
+      + `조합 ${r.sets_evaluated}개 평가`);
 
-  const gainEl = document.getElementById("route-gain");
-  const btn = document.getElementById("route-apply");
-  const gain = best && best.gain !== null ? best.gain : 0;
+  drawRouteMap(r, best);
 
-  if (best && gain > 0.005) {
-    gainEl.className = "route-gain up";
-    gainEl.textContent = `+${gain.toFixed(2)}%p 개선 가능`;
-    btn.disabled = false;
-    btn.textContent = `추천 경로 ${best.path} 적용`;
-  } else {
-    gainEl.className = "route-gain";
-    gainEl.textContent = `현재 경로가 최적 (${r.current.rank}위 / ${r.searched})`;
-    btn.disabled = true;
-    btn.textContent = "추천 경로 적용";
-  }
-
-  document.getElementById("route-list").innerHTML = r.top.map(t => `
-    <li class="${t.path === r.current.path ? "is-cur" : ""}">
-      <span class="r-rank">${t.rank}</span>
-      <span class="r-path">${t.path}</span>
-      <span class="r-y">${fmt(t.yield, 2)}%</span>
+  document.getElementById("lane-list").innerHTML = best.lanes.map((ln, i) => `
+    <li data-lane="${i}">
+      <span class="lane-dot" style="background:${LANE_COLORS[i]}"></span>
+      <span class="lane-name">라인 ${ln.lane}</span>
+      <span class="lane-path"><b class="locked">${ln.fixed.join("-")}</b>${
+        ln.fixed.length && ln.searched.length ? "-" : ""}${ln.searched.join("-")}</span>
+      <span class="lane-y">${fmt(ln.yield, 2)}%</span>
     </li>`).join("");
 
-  const mirrorNote = (r.mirrors || []).length
-    ? ` · 이온 주입 챔버는 식각 챔버에 연동되어 탐색에서 제외`
-    : "";
-  set("#route-foot", `경로 표기 순서: ${names}${mirrorNote}`);
+  document.querySelectorAll("#lane-list li").forEach(li => {
+    li.onclick = () => applyLane(Number(li.dataset.lane));
+    li.title = "클릭하면 이 라인의 챔버를 적용합니다";
+  });
+
+  set("#set-avg", `${fmt(best.avg_yield, 2)}%`);
+  set("#set-min", `최저 ${fmt(best.min_yield, 2)}%`);
+  set("#route-cur", r.current.path);
+  set("#route-cur-y", r.current.yield == null
+    ? "고정 구간 밖" : `${fmt(r.current.yield, 2)}%`);
+  set("#route-foot",
+      `공정 순서: ${r.stages.map(s => s.name).join(" → ")}`
+      + (r.mirrors.length ? " · 이온 챔버는 식각에 연동" : ""));
 }
 
-/* 추천 경로를 실제 챔버 버튼에 반영 */
-function applyRoute() {
-  if (!lastRoute || !lastRoute.best) return;
-  Object.entries(lastRoute.best.chambers).forEach(([key, val]) => {
+/* 12개 챔버 노드 위에 세 경로를 선으로 잇는다 */
+function drawRouteMap(r, best) {
+  const W = 276, PAD_L = 30, PAD_T = 26;
+  const cols = r.stages.length;
+  const rows = r.stages[0].options.length;
+  const dx = (W - PAD_L - 24) / (cols - 1);
+  const dy = 42;
+  const H = PAD_T + (rows - 1) * dy + 30;
+
+  const cx = i => PAD_L + i * dx;
+  const cy = j => PAD_T + j * dy;
+
+  const head = r.stages.map((s, i) =>
+    `<text class="rm-head" x="${cx(i)}" y="10" text-anchor="middle">${shortStage(s.name)}</text>`
+  ).join("");
+
+  const lock = r.locked_upto;
+  let band = "";
+  if (lock > 0) {
+    const x0 = cx(0) - 17, x1 = cx(lock - 1) + 17;
+    band = `<rect class="rm-lock" x="${x0}" y="4" width="${x1 - x0}" height="${H - 12}" rx="6"/>`;
+  }
+
+  let nodes = "";
+  for (let i = 0; i < cols; i++)
+    for (let j = 0; j < rows; j++)
+      nodes += `<circle class="rm-node${i < lock ? " locked" : ""}" cx="${cx(i)}" cy="${cy(j)}" r="11"/>
+                <text class="rm-num" x="${cx(i)}" y="${cy(j)}" text-anchor="middle"
+                      dominant-baseline="central">${r.stages[i].options[j]}</text>`;
+
+  const lines = best.lanes.map((ln, k) => {
+    const idx = ln.path.split("-").map((v, i) => r.stages[i].options.indexOf(v));
+    const off = (k - (rows - 1) / 2) * 3.2;
+    const pts = idx.map((j, i) => `${cx(i)},${cy(j) + off}`).join(" ");
+    return `<polyline class="rm-line" points="${pts}" stroke="${LANE_COLORS[k]}"/>`;
+  }).join("");
+
+  document.getElementById("route-map").innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" width="100%">${band}${head}${lines}${nodes}</svg>`;
+}
+
+function shortStage(name) {
+  return name.replace("Photo ", "").replace(" 공정", "")
+             .replace("Soft Bake", "베이크").replace("Lithography", "리소");
+}
+
+/* 라인 하나를 클릭하면 그 챔버 조합을 슬라이더에 반영 */
+function applyLane(k) {
+  if (!lastRoute || !lastRoute.ok) return;
+  const lane = lastRoute.best.lanes[k];
+  Object.entries(lane.chambers).forEach(([key, val]) => {
     params[key] = val;
     const seg = document.querySelector(`[data-seg="${key}"]`);
     if (!seg) return;
-    seg.querySelectorAll("button").forEach(b => {
-      b.classList.toggle("on", b.textContent === String(val));
-    });
+    seg.querySelectorAll("button").forEach(b =>
+      b.classList.toggle("on", b.textContent === String(val)));
     seg.closest(".param").classList.toggle("changed", String(val) !== String(defaults[key]));
   });
   syncMirrors();
@@ -515,6 +562,7 @@ function reset() {
   document.getElementById("yield-base").textContent =
     `기본값 ${fmt(baselineYield, 2)}%`;
   lastStage = null;
+  lastRoute = null;
   predict();
   scheduleRoute();
 }

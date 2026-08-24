@@ -422,3 +422,43 @@ input[type=range]::-moz-range-track{background:transparent}
   font-size:11px;color:var(--n-500);
   width:calc(var(--gauge-w) + 9px + var(--num-w));max-width:100%;text-align:right;
 }
+
+/* ── 챔버 최적 경로 조합 ──────────────────────────────── */
+.route-map{margin-top:12px}
+.route-map svg{display:block;overflow:visible}
+.rm-head{
+  font-family:var(--font-h);font-size:10.5px;font-weight:600;
+  letter-spacing:.02em;fill:var(--n-600);
+}
+.rm-node{fill:#fff;stroke:var(--n-300);stroke-width:1.2}
+.rm-num{
+  font-family:var(--font-h);font-size:11px;font-weight:700;
+  fill:var(--n-700);pointer-events:none;
+}
+.rm-line{
+  fill:none;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;opacity:.9;
+}
+
+.lane-list{list-style:none;margin-top:12px}
+.lane-list li{
+  display:grid;grid-template-columns:10px auto minmax(0,1fr) auto;
+  align-items:center;gap:8px;padding:7px 4px;cursor:pointer;
+  border-bottom:1px solid var(--n-200);transition:background .12s;
+}
+.lane-list li:last-child{border-bottom:none}
+.lane-list li:hover{background:var(--a-100)}
+.lane-dot{width:10px;height:10px;border-radius:50%}
+.lane-name{font-size:12px;font-weight:600;color:var(--n-700);white-space:nowrap}
+.lane-path{
+  font-family:var(--font-h);font-size:14px;font-weight:700;letter-spacing:.08em;
+  color:var(--n-900);font-variant-numeric:tabular-nums;
+}
+.lane-y{
+  font-family:var(--font-h);font-size:13px;font-weight:600;color:var(--a-800);
+  font-variant-numeric:tabular-nums;justify-self:end;
+}
+
+/* 경로 조합 - 고정 구간 표시 */
+.rm-lock{fill:var(--n-200);opacity:.55}
+.rm-node.locked{stroke:var(--n-500);stroke-dasharray:2.5 2}
+.lane-path .locked{color:var(--n-500);font-weight:600}
