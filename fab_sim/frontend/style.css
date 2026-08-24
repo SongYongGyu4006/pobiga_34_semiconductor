@@ -319,3 +319,36 @@ input[type=range]::-moz-range-track{background:transparent}
   padding:7px 14px;transition:.2s;
 }
 .hidden{opacity:0;pointer-events:none}
+
+/* ── 다중 출력 / 파생값 (추가) ─────────────────────────── */
+.stage-pred{gap:0}
+.pred-block{display:flex;flex-direction:column;gap:6px;padding-top:7px}
+.pred-block.sub{
+  margin-top:11px;padding-top:11px;border-top:1px dashed var(--n-300);
+}
+.pred-block.sub .pred-val span{font-size:26px}
+.pred-block.sub .pred-name{font-size:13.5px;color:var(--n-700)}
+
+.param.derived{background:transparent}
+.param.derived .param-name{color:var(--n-700);font-weight:500}
+.param-label .auto{
+  font-family:var(--font-h);font-size:10.5px;font-weight:600;letter-spacing:.08em;
+  color:var(--n-500);flex:none;
+}
+.derived-val{
+  display:flex;align-items:baseline;justify-content:flex-end;gap:4px;
+  width:calc(var(--gauge-w) + 9px + var(--num-w));max-width:100%;
+  padding-right:3px;
+}
+.derived-val span{
+  font-family:var(--font-h);font-size:15px;font-weight:600;color:var(--n-700);
+  font-variant-numeric:tabular-nums;
+}
+.derived-val em{font-style:normal;font-family:var(--font-h);font-size:11px;font-weight:600;color:var(--n-500)}
+
+/* ── 예측 모델이 없는 공정 (이온 주입) ─────────────────── */
+.stage-pred.passthru{justify-content:flex-start}
+.passthru-msg{
+  margin-top:9px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--n-600);
+}
+.stage.no-pred .stage-head-out{display:none}

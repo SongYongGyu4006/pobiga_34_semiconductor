@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=23">
+<link rel="stylesheet" href="/static/style.css?v=31">
 </head>
 <body>
 
@@ -42,12 +42,12 @@
         <div class="stat">
           <span class="stat-label">웨이퍼당 예상 결함 Die</span>
           <div class="stat-val"><b id="defect-num">--</b></div>
-          <span class="stat-foot" id="defect-base">기준 —</span>
+          <span class="stat-foot" id="defect-base">기본값 —</span>
         </div>
         <div class="stat">
           <span class="stat-label">공정 이탈 점수</span>
           <div class="stat-val"><b id="sigma-num">--</b><em>σ</em></div>
-          <span class="stat-foot">|Z| 평균, 0 = 공정 중심</span>
+          <span class="stat-foot">기본값 대비 평균 이탈</span>
         </div>
       </div>
     </div>
@@ -63,6 +63,6 @@
 
 <div id="loading" class="loading hidden">계산 중</div>
 
-<script src="/static/app.js?v=23"></script>
+<script src="/static/app.js?v=31"></script>
 </body>
 </html>

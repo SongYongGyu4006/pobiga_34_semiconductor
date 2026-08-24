@@ -1,12 +1,21 @@
 """
-공정 파이프라인 실행기.
+공정 파이프라인.
 
-schema 의 order 순서대로 모델을 돌리며, 상류 공정의 예측값을
-하류 모델 입력에 자동으로 끼워 넣는다.
+흐름
+  1. 프론트에서 온 파라미터 + 숨김 공정 기본값을 합친다
+  2. 파생변수(Etch_Drop_10_20 등)를 계산한다
+  3. 공정 순서대로 모델을 실행하고, 예측값을 그대로 컨텍스트에 넣는다
+     (하류 모델이 같은 이름의 피처로 그 값을 사용)
+  4. 최종 수율 모델을 실행하고 Target -> 수율(%) 로 환산한다
 """
 from __future__ import annotations
 
 from typing import Any, Dict, List
+
+OPS = {
+    "sub": lambda a, b: a - b,
+    "add": lambda a, b: a + b,
+}
 
 
 class Pipeline:
@@ -14,86 +23,85 @@ class Pipeline:
         self.schema = schema
         self.registry = registry
         self.stages = sorted(schema["stages"], key=lambda s: s["order"])
-        self.yield_id = schema["yield_model"]["id"]
-        self.yield_mode = schema["meta"].get("yield_input_mode", "hybrid")
+        self.yield_cfg = schema["yield_model"]
+
+        self._dtype = {}
+        for st in self.stages:
+            for p in st["params"]:
+                self._dtype[p["key"]] = p.get("dtype", "float")
 
     # ------------------------------------------------------------------
     def defaults(self) -> Dict[str, Any]:
-        """모든 파라미터의 기본값 딕셔너리."""
         out: Dict[str, Any] = {}
-        for stage in self.stages:
-            for p in stage["params"]:
+        for st in self.stages:
+            for p in st["params"]:
                 out[p["key"]] = p["default"]
         return out
 
+    def _cast(self, key: str, value: Any) -> Any:
+        d = self._dtype.get(key, "float")
+        try:
+            if d == "int":
+                return int(float(value))
+            if d == "str":
+                return str(value)
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+
     # ------------------------------------------------------------------
     def run(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        params: {param_key: value} 전체 (프론트에서 통째로 보냄)
-        return: {"stages": {stage_id: {...}}, "yield": {...}}
-        """
-        merged = self.defaults()
-        merged.update({k: v for k, v in params.items() if v is not None})
+        ctx = self.defaults()
+        ctx.update({k: v for k, v in params.items() if v is not None and k in ctx})
+        ctx = {k: self._cast(k, v) for k, v in ctx.items()}
 
-        outputs: Dict[str, float] = {}          # output_key -> 예측값
-        stage_results: Dict[str, Any] = {}
+        # 파생변수
+        derived_out: Dict[str, Any] = {}
+        for st in self.stages:
+            for d in st.get("derived", []):
+                a, b = (ctx[x] for x in d["args"])
+                val = OPS[d["op"]](a, b)
+                ctx[d["key"]] = val
+                derived_out[d["key"]] = {
+                    "key": d["key"], "name": d["name"],
+                    "unit": d.get("unit", ""), "value": round(float(val), 4),
+                    "stage": st["id"], "after": d.get("after"),
+                }
 
-        for stage in self.stages:
-            sid = stage["id"]
-            okey = stage["output"]["key"]
+        # 공정별 모델
+        stage_results: Dict[str, List[Dict[str, Any]]] = {}
+        for st in self.stages:
+            outs = []
+            for m in st["models"]:
+                val = float(self.registry[m["id"]].predict(ctx))
+                okey = m["output"]["key"]
+                ctx[okey] = val
+                outs.append({
+                    "model_id": m["id"], "key": okey,
+                    "name": m["output"]["name"], "unit": m["output"]["unit"],
+                    "value": round(val, 4), "range": m["output"]["range"],
+                    "ratio": _scale(val, m["output"]["range"]),
+                })
+            if outs:
+                stage_results[st["id"]] = outs
 
-            features: Dict[str, Any] = {
-                p["key"]: merged[p["key"]] for p in stage["params"]
-            }
-            # 상류 공정의 예측값을 0~1 로 정규화해서 주입
-            for up_id in stage.get("upstream", []):
-                up = self._stage(up_id)
-                up_key = up["output"]["key"]
-                if up_key in outputs:
-                    features[up_key] = _scale(outputs[up_key], up["output"]["range"])
-
-            value = float(self.registry[sid].predict(features))
-            outputs[okey] = value
-            stage_results[sid] = {
-                "key": okey,
-                "name": stage["output"]["name"],
-                "unit": stage["output"]["unit"],
-                "value": round(value, 4),
-                "range": stage["output"]["range"],
-                "ratio": _scale(value, stage["output"]["range"]),
-            }
-
-        # ------- 수율 모델 -------
-        y_features: Dict[str, Any] = {}
-        if self.yield_mode in ("direct", "hybrid"):
-            y_features.update(merged)
-        if self.yield_mode in ("chain", "hybrid"):
-            for stage in self.stages:
-                okey = stage["output"]["key"]
-                y_features[okey] = _scale(outputs[okey], stage["output"]["range"])
-
-        ycfg = self.schema["yield_model"]["output"]
-        yval = float(self.registry[self.yield_id].predict(y_features))
+        # 최종 수율
+        yc = self.yield_cfg
+        target = float(self.registry[yc["id"]].predict(ctx))
+        total = yc["target"]["total_dies"]
+        yield_rate = (1 - target / total) * 100
 
         return {
             "stages": stage_results,
-            "yield": {
-                "key": ycfg["key"],
-                "name": ycfg["name"],
-                "unit": ycfg["unit"],
-                "value": round(yval, 3),
-                "range": ycfg["range"],
-                "ratio": _scale(yval, ycfg["range"]),
-            },
-            "input_mode": self.yield_mode,
+            "derived": derived_out,
+            "target": {"key": yc["target"]["key"], "name": yc["target"]["name"],
+                       "unit": yc["target"]["unit"],
+                       "value": round(target, 2), "total_dies": total},
+            "yield": {"key": "yield_rate", "name": yc["output"]["name"], "unit": "%",
+                      "value": round(yield_rate, 3),
+                      "range": yc["output"]["range"],
+                      "ratio": _scale(yield_rate, yc["output"]["range"])},
         }
-
-    # ------------------------------------------------------------------
-    def _stage(self, stage_id: str) -> Dict[str, Any]:
-        for s in self.stages:
-            if s["id"] == stage_id:
-                return s
-        raise KeyError(stage_id)
 
 
 def _scale(value: float, rng: List[float]) -> float:

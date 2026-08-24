@@ -3,9 +3,9 @@
 
 실행:
     cd backend
-    uvicorn app:app --reload --port 8000
+    uvicorn app:app --port 8000
 
-브라우저에서 http://localhost:8000 접속
+브라우저에서 http://localhost:8000
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from models.registry import build_registry
+from models.base import build_registry
 from pipeline import Pipeline
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,52 +37,48 @@ registry = build_registry(schema)
 pipeline = Pipeline(schema, registry)
 
 app = FastAPI(title=schema["meta"]["title"])
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                   allow_methods=["*"], allow_headers=["*"])
 
 
 class PredictRequest(BaseModel):
     params: Dict[str, Any] = {}
 
 
-# ---------------------------------------------------------------- API
 @app.get("/api/schema")
 def get_schema():
-    """프론트엔드가 UI를 그리기 위해 읽는 설정."""
-    return schema
+    """프론트가 UI 를 그리기 위해 읽는 설정. 숨김 공정은 제외."""
+    pub = json.loads(json.dumps(schema))
+    pub["stages"] = [s for s in pub["stages"] if not s.get("hidden")]
+    return pub
 
 
 @app.get("/api/defaults")
 def get_defaults():
-    """기본값 + 기본값 기준 초기 예측 결과."""
     params = pipeline.defaults()
     return {"params": params, "prediction": pipeline.run(params)}
 
 
 @app.post("/api/predict")
 def predict(req: PredictRequest):
-    """슬라이더가 움직일 때마다 호출되는 엔드포인트."""
     return pipeline.run(req.params)
 
 
 @app.post("/api/reload")
 def reload_models():
-    """artifacts 에 새 모델을 넣은 뒤 서버 재시작 없이 반영."""
     global schema, registry, pipeline
     schema = load_schema()
     registry = build_registry(schema)
     pipeline = Pipeline(schema, registry)
-    return {"ok": True, "stages": [s["id"] for s in schema["stages"]]}
+    return {"ok": True}
 
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "yield_input_mode": pipeline.yield_mode}
+    return {"ok": True,
+            "models": {k: type(v).__name__ for k, v in registry.items()}}
 
 
-# ---------------------------------------------------------------- 정적 파일
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
