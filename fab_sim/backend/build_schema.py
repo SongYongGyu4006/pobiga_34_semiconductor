@@ -110,6 +110,11 @@ UNIT = {
 CATEGORICAL = {"Ox_Type", "UV_type", "Ox_Chamber", "photo_soft_Chamber",
                "litho_Chamber", "Etching_Chamber", "Ion_Chamber"}
 
+# 원본 데이터에서 값이 100% 일치하는 컬럼 쌍.
+# 왼쪽 파라미터는 오른쪽 값을 그대로 따라가며, 사용자가 직접 조절할 수 없다.
+# 챔버 경로 탐색에서도 차원에서 제외된다.
+MIRROR = {"Ion_Chamber": "Etching_Chamber"}
+
 # 프론트 파라미터명 -> 원본 CSV 컬럼명 (Thin F 는 Etching.csv 에만 존재)
 SOURCE_COL = {"Thin_F1": "Thin F1", "Thin_F2": "Thin F2", "Thin_F3": "Thin F3"}
 
@@ -127,6 +132,9 @@ def nice_step(lo: float, hi: float) -> float:
 def build_param(series: pd.Series, key: str) -> dict:
     s = series.dropna()
     base = {"key": key, "name": KOR.get(key, key), "unit": UNIT.get(key, "")}
+
+    if key in MIRROR:
+        base["mirror"] = MIRROR[key]
 
     if key in CATEGORICAL:
         is_int = pd.api.types.is_integer_dtype(s)
@@ -174,8 +182,13 @@ def main(merged_path: str, etching_path: str, out_path: str) -> None:
                            "median": round(float(o.median()), 6)},
             })
 
+        chamber_key = next((p["key"] for p in params
+                            if p["type"] == "category" and "hamber" in p["key"]
+                            and "mirror" not in p), None)
+
         stages.append({
             "id": cfg["id"], "name": cfg["name"], "order": cfg["order"],
+            "chamber_key": chamber_key,
             "hidden": bool(cfg.get("hidden", False)),
             "note": cfg.get("note", ""),
             "ui_only": cfg.get("ui_only", []),
@@ -183,8 +196,14 @@ def main(merged_path: str, etching_path: str, out_path: str) -> None:
             "params": params,
             "models": models,
         })
-        print(f"[{cfg['id']}] params={len(params)} models={[m['id'] for m in models]}"
-              f"{' (hidden)' if cfg.get('hidden') else ''}")
+        print(f"[{cfg['id']}] params={len(params)} models={[m['id'] for m in models]} "
+              f"chamber={chamber_key}{' (hidden)' if cfg.get('hidden') else ''}")
+
+    for a, b in MIRROR.items():
+        if a in mg.columns and b in mg.columns:
+            same = (mg[a] == mg[b]).mean() * 100
+            print(f"[mirror] {a} → {b} 일치율 {same:.2f}%"
+                  + ("" if same > 99.9 else "  ⚠ 완전 일치가 아님"))
 
     tgt = mg[YIELD["target_key"]].dropna()
     total = YIELD["total_dies"]

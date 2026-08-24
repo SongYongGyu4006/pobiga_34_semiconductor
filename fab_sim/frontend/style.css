@@ -352,3 +352,73 @@ input[type=range]::-moz-range-track{background:transparent}
   margin-top:9px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--n-600);
 }
 .stage.no-pred .stage-head-out{display:none}
+
+/* ── 챔버 경로 추천 ───────────────────────────────────── */
+.panel-route .kicker{font-size:14px;font-weight:700;letter-spacing:.08em;color:var(--a-800)}
+.route-scope{margin-top:6px;font-size:12px;color:var(--n-600);line-height:1.45}
+
+.route-box{margin-top:12px;border:1px solid var(--n-200);padding:11px 12px 10px}
+.route-line{
+  display:grid;grid-template-columns:34px minmax(0,1fr) auto;
+  align-items:baseline;gap:8px;padding:4px 0;
+}
+.route-tag{
+  font-family:var(--font-h);font-size:10px;font-weight:700;letter-spacing:.06em;
+  color:var(--n-600);
+}
+.route-line.best .route-tag{color:var(--a-700)}
+.route-path{
+  font-family:var(--font-h);font-size:16px;font-weight:600;letter-spacing:.06em;
+  color:var(--n-800);font-variant-numeric:tabular-nums;
+}
+.route-line.best .route-path{color:var(--a-800);font-weight:700}
+.route-yield{
+  font-family:var(--font-h);font-size:13px;font-weight:600;color:var(--n-700);
+  font-variant-numeric:tabular-nums;justify-self:end;
+}
+.route-line.best .route-yield{color:var(--a-800)}
+.route-gain{
+  margin-top:7px;padding-top:7px;border-top:1px dashed var(--n-300);
+  font-family:var(--font-h);font-size:12.5px;font-weight:600;color:var(--n-600);
+  text-align:right;font-variant-numeric:tabular-nums;
+}
+.route-gain.up{color:var(--a-800)}
+
+.route-btn{
+  width:100%;margin-top:10px;padding:8px 0;cursor:pointer;
+  font-family:var(--font-h);font-size:13px;font-weight:600;
+  color:#fff;background:var(--a-800);border:1px solid var(--a-800);border-radius:3px;
+  transition:.12s;
+}
+.route-btn:hover:not(:disabled){background:var(--a-900);border-color:var(--a-900)}
+.route-btn:disabled{
+  background:transparent;color:var(--n-500);border-color:var(--divider);cursor:default;
+}
+
+.route-list{list-style:none;margin-top:12px}
+.route-list li{
+  display:grid;grid-template-columns:16px minmax(0,1fr) auto;
+  align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--n-200);
+  font-family:var(--font-h);font-variant-numeric:tabular-nums;
+}
+.route-list li:last-child{border-bottom:none}
+.route-list li.is-cur{background:var(--a-100)}
+.route-list .r-rank{font-size:10.5px;font-weight:700;color:var(--n-500)}
+.route-list .r-path{font-size:13.5px;font-weight:600;color:var(--n-800);letter-spacing:.05em}
+.route-list .r-y{font-size:12.5px;font-weight:600;color:var(--n-700);justify-self:end}
+.route-foot{margin-top:9px;font-size:11px;color:var(--n-500);line-height:1.45}
+
+/* ── 연동(미러) 파라미터 ──────────────────────────────── */
+.param.linked .param-name{color:var(--n-700);font-weight:500}
+.param.linked .param-ctrl{flex-direction:column;align-items:flex-end;gap:4px}
+.param.linked .seg button{
+  cursor:default;opacity:.75;border-style:dashed;
+}
+.param.linked .seg button.on{
+  background:var(--n-200);border-color:var(--n-500);color:var(--n-800);
+  border-style:solid;opacity:1;
+}
+.link-note{
+  font-size:11px;color:var(--n-500);
+  width:calc(var(--gauge-w) + 9px + var(--num-w));max-width:100%;text-align:right;
+}

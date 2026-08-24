@@ -45,6 +45,12 @@ class PredictRequest(BaseModel):
     params: Dict[str, Any] = {}
 
 
+class RecommendRequest(BaseModel):
+    params: Dict[str, Any] = {}
+    from_stage: str | None = None      # 이 공정부터 챔버를 탐색
+    top_n: int = 5
+
+
 @app.get("/api/schema")
 def get_schema():
     """프론트가 UI 를 그리기 위해 읽는 설정. 숨김 공정은 제외."""
@@ -62,6 +68,12 @@ def get_defaults():
 @app.post("/api/predict")
 def predict(req: PredictRequest):
     return pipeline.run(req.params)
+
+
+@app.post("/api/recommend")
+def recommend(req: RecommendRequest):
+    """from_stage 이후 공정의 챔버 조합을 전수 탐색해 수율 순으로 반환."""
+    return pipeline.recommend(req.params, req.from_stage, req.top_n)
 
 
 @app.post("/api/reload")

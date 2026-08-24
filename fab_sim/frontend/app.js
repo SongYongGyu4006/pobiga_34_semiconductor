@@ -19,6 +19,12 @@ let baselineDefect = null;
 let timer = null;
 let inflight = null;
 
+let paramStage = {};            // {param_key: stage_id}
+let lastStage = null;           // 마지막으로 조절한 공정
+let routeTimer = null;
+let routeInflight = null;
+let lastRoute = null;
+
 // ------------------------------------------------------------------ 초기화
 async function init() {
   schema = await fetch(`${API}/api/schema`).then(r => r.json());
@@ -38,8 +44,11 @@ async function init() {
   document.getElementById("yield-base").textContent =
     `기본값 ${fmt(baselineYield, 2)}%`;
 
+  syncMirrors();
   applyPrediction(boot.prediction);
   document.getElementById("reset-btn").onclick = reset;
+  document.getElementById("route-apply").onclick = applyRoute;
+  scheduleRoute();
 }
 
 function orderedStages() {
@@ -54,6 +63,9 @@ function allOutputs() {
 function renderStages() {
   const root = document.getElementById("stages");
   root.innerHTML = "";
+
+  paramStage = {};
+  orderedStages().forEach(s => s.params.forEach(p => { paramStage[p.key] = s.id; }));
 
   orderedStages().forEach((stage, i) => {
     const el = document.createElement("section");
@@ -148,10 +160,13 @@ function buildParam(p) {
   wrap.className = "param";
 
   if (p.type === "category") {
+    const linked = !!p.mirror;
+    if (linked) wrap.classList.add("linked");
+
     wrap.innerHTML = `
       <div class="param-label">
         <span class="param-name">${p.name}</span>
-        <span class="mod">MOD</span>
+        <span class="${linked ? "auto" : "mod"}">${linked ? "LINK" : "MOD"}</span>
       </div>
       <div class="param-ctrl"><div class="seg" data-seg="${p.key}"></div></div>`;
 
@@ -160,14 +175,26 @@ function buildParam(p) {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = opt;
-      b.className = String(opt) === String(p.default) ? "on" : "";
-      b.onclick = () => {
-        seg.querySelectorAll("button").forEach(x => x.classList.remove("on"));
-        b.classList.add("on");
-        setParam(p, opt, wrap);
-      };
+      b.className = String(opt) === String(params[p.key] ?? p.default) ? "on" : "";
+      if (linked) {
+        b.disabled = true;
+      } else {
+        b.onclick = () => {
+          seg.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+          b.classList.add("on");
+          setParam(p, opt, wrap);
+        };
+      }
       seg.appendChild(b);
     });
+
+    if (linked) {
+      const src = mirrorSourceName(p.mirror);
+      const note = document.createElement("p");
+      note.className = "link-note";
+      note.textContent = `${src} 챔버와 동일 (조절 불가)`;
+      wrap.querySelector(".param-ctrl").appendChild(note);
+    }
     return wrap;
   }
 
@@ -228,6 +255,32 @@ function buildParam(p) {
   return wrap;
 }
 
+function mirrorParams() {
+  return orderedStages().flatMap(s => s.params.filter(p => p.mirror)
+    .map(p => ({ key: p.key, source: p.mirror })));
+}
+
+function mirrorSourceName(sourceKey) {
+  for (const s of orderedStages()) {
+    const p = s.params.find(x => x.key === sourceKey);
+    if (p) return s.name;
+  }
+  return sourceKey;
+}
+
+/* 연동 파라미터를 원본 값에 맞춘다 */
+function syncMirrors() {
+  mirrorParams().forEach(({ key, source }) => {
+    const v = params[source];
+    if (v === undefined) return;
+    params[key] = v;
+    const seg = document.querySelector(`[data-seg="${key}"]`);
+    if (!seg) return;
+    seg.querySelectorAll("button").forEach(b =>
+      b.classList.toggle("on", b.textContent === String(v)));
+  });
+}
+
 function paintFill(fill, p, value) {
   const r = (value - p.min) / (p.max - p.min);
   fill.style.width = `calc((100% - 8px) * ${Math.max(0, Math.min(1, r)).toFixed(4)})`;
@@ -237,7 +290,10 @@ function paintFill(fill, p, value) {
 function setParam(p, value, wrap) {
   params[p.key] = value;
   wrap.classList.toggle("changed", String(value) !== String(defaults[p.key]));
+  lastStage = paramStage[p.key] || lastStage;
+  syncMirrors();
   schedulePredict();
+  scheduleRoute();
 }
 
 function applyNumeric(p, wrap, value, rewrite = true) {
@@ -307,6 +363,90 @@ async function predict() {
   }
 }
 
+// ------------------------------------------------------------------ 챔버 경로 추천
+function scheduleRoute() {
+  clearTimeout(routeTimer);
+  routeTimer = setTimeout(fetchRoute, 350);
+}
+
+async function fetchRoute() {
+  if (routeInflight) routeInflight.abort();
+  routeInflight = new AbortController();
+  try {
+    const res = await fetch(`${API}/api/recommend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ params, from_stage: lastStage, top_n: 5 }),
+      signal: routeInflight.signal,
+    });
+    renderRoute(await res.json());
+  } catch (e) {
+    if (e.name !== "AbortError") console.error(e);
+  } finally {
+    routeInflight = null;
+  }
+}
+
+function renderRoute(r) {
+  lastRoute = r;
+  const names = r.stages.map(s => s.name).join(" → ");
+  set("#route-scope",
+      `${r.from_stage_name} 이후 ${r.stages.length}개 공정 · ${r.searched}개 경로 탐색`
+      + (r.fixed.length ? `\n이전 공정 고정: ${r.fixed_path}` : ""));
+
+  set("#route-cur", r.current.path || "—");
+  set("#route-cur-y", r.current.yield === null ? "—" : `${fmt(r.current.yield, 2)}%`);
+
+  const best = r.best;
+  set("#route-best", best ? best.path : "—");
+  set("#route-best-y", best ? `${fmt(best.yield, 2)}%` : "—");
+
+  const gainEl = document.getElementById("route-gain");
+  const btn = document.getElementById("route-apply");
+  const gain = best && best.gain !== null ? best.gain : 0;
+
+  if (best && gain > 0.005) {
+    gainEl.className = "route-gain up";
+    gainEl.textContent = `+${gain.toFixed(2)}%p 개선 가능`;
+    btn.disabled = false;
+    btn.textContent = `추천 경로 ${best.path} 적용`;
+  } else {
+    gainEl.className = "route-gain";
+    gainEl.textContent = `현재 경로가 최적 (${r.current.rank}위 / ${r.searched})`;
+    btn.disabled = true;
+    btn.textContent = "추천 경로 적용";
+  }
+
+  document.getElementById("route-list").innerHTML = r.top.map(t => `
+    <li class="${t.path === r.current.path ? "is-cur" : ""}">
+      <span class="r-rank">${t.rank}</span>
+      <span class="r-path">${t.path}</span>
+      <span class="r-y">${fmt(t.yield, 2)}%</span>
+    </li>`).join("");
+
+  const mirrorNote = (r.mirrors || []).length
+    ? ` · 이온 주입 챔버는 식각 챔버에 연동되어 탐색에서 제외`
+    : "";
+  set("#route-foot", `경로 표기 순서: ${names}${mirrorNote}`);
+}
+
+/* 추천 경로를 실제 챔버 버튼에 반영 */
+function applyRoute() {
+  if (!lastRoute || !lastRoute.best) return;
+  Object.entries(lastRoute.best.chambers).forEach(([key, val]) => {
+    params[key] = val;
+    const seg = document.querySelector(`[data-seg="${key}"]`);
+    if (!seg) return;
+    seg.querySelectorAll("button").forEach(b => {
+      b.classList.toggle("on", b.textContent === String(val));
+    });
+    seg.closest(".param").classList.toggle("changed", String(val) !== String(defaults[key]));
+  });
+  syncMirrors();
+  predict();
+  scheduleRoute();
+}
+
 // ------------------------------------------------------------------ 결과 반영
 function applyPrediction(data) {
   Object.values(data.stages).forEach(outs => outs.forEach(o => {
@@ -374,7 +514,9 @@ function reset() {
   renderStages();
   document.getElementById("yield-base").textContent =
     `기본값 ${fmt(baselineYield, 2)}%`;
+  lastStage = null;
   predict();
+  scheduleRoute();
 }
 
 // ------------------------------------------------------------------ 유틸

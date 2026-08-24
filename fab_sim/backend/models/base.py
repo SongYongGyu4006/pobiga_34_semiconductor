@@ -21,6 +21,10 @@ class Predictor:
     def predict(self, ctx: Dict[str, Any]) -> float:
         raise NotImplementedError
 
+    def predict_frame(self, df: "pd.DataFrame"):
+        """여러 조합을 한 번에 예측 (챔버 경로 탐색용)."""
+        raise NotImplementedError
+
 
 class SklearnPredictor(Predictor):
     """
@@ -57,6 +61,18 @@ class SklearnPredictor(Predictor):
         X = pd.DataFrame(row, columns=self.feature_keys)
         return float(self.pipeline.predict(X)[0])
 
+    def predict_frame(self, df: pd.DataFrame):
+        cols = {}
+        for k in self.feature_keys:
+            if k in df.columns:
+                cols[k] = df[k].values
+            elif k in self.constants:
+                cols[k] = [self.constants[k]] * len(df)
+            else:
+                raise KeyError(f"[{self.name}] 입력도 상수도 없는 피처: {k}")
+        X = pd.DataFrame(cols, columns=self.feature_keys, index=df.index)
+        return self.pipeline.predict(X)
+
 
 class StubPredictor(Predictor):
     """모델 파일이 없을 때 UI 동작 확인용. 실제 물리와 무관."""
@@ -87,6 +103,9 @@ class StubPredictor(Predictor):
     def predict(self, ctx: Dict[str, Any]) -> float:
         z = sum(self._w[k] * (self._norm(k, ctx.get(k)) - 0.5) for k in self.feature_keys)
         return self.lo + (1 / (1 + math.exp(-2.2 * z))) * (self.hi - self.lo)
+
+    def predict_frame(self, df: pd.DataFrame):
+        return [self.predict(r) for r in df.to_dict("records")]
 
 
 def _feature_names(pipeline) -> List[str]:
