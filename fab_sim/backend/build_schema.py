@@ -115,6 +115,35 @@ CATEGORICAL = {"Ox_Type", "UV_type", "Ox_Chamber", "photo_soft_Chamber",
 # 챔버 경로 탐색에서도 차원에서 제외된다.
 MIRROR = {"Ion_Chamber": "Etching_Chamber"}
 
+# ---------------------------------------------------------------------------
+# Process Window : 분석으로 도출한 권장 조업 구간.
+#   슬라이더의 min / max 를 이 값으로 좁히고,
+#   기본값(중앙값)이 창을 벗어나면 가까운 경계로 당긴다.
+# ---------------------------------------------------------------------------
+PROCESS_WINDOW = {
+    "Ox_Temp":      {"min": 1266.666, "max": 1348.620},
+    "Ox_ppm":       {"min": 20.750,   "max": 45.370},
+    "spin3_rpm":    {"min": 4947.144, "max": 5107.455},
+    "Furnace_Temp": {"min": 865,      "max": 917},
+}
+
+# ---------------------------------------------------------------------------
+# 데이터 분석으로 확정된 최적 경로 조합.
+#   시뮬레이터는 이 조합을 기본으로 표시하고,
+#   사용 불가 챔버가 생겨 성립하지 않을 때만 모델 기반 탐색으로 대체한다.
+#   yield / sd / wafers 는 윈도우 만족 고유 웨이퍼 174장 기준 실측값.
+# ---------------------------------------------------------------------------
+FIXED_ROUTE_SET = {
+    "source": "데이터 분석 · 윈도우 만족 고유 웨이퍼 174장",
+    "avg_yield": 91.338,
+    "note": "경로당 고유 웨이퍼 ≥ 2, 최대 표준편차 ≤ 6 제약에서 평균 수율 최대",
+    "lanes": [
+        {"lane": "1", "path": "1-1-1-1", "yield": 90.150, "sd": 1.990, "wafers": 2},
+        {"lane": "2", "path": "2-3-3-3", "yield": 91.745, "sd": 3.748, "wafers": 3},
+        {"lane": "3", "path": "3-2-2-2", "yield": 92.120, "sd": 5.930, "wafers": 3},
+    ],
+}
+
 # 프론트 파라미터명 -> 원본 CSV 컬럼명 (Thin F 는 Etching.csv 에만 존재)
 SOURCE_COL = {"Thin_F1": "Thin F1", "Thin_F2": "Thin F2", "Thin_F3": "Thin F3"}
 
@@ -145,10 +174,29 @@ def build_param(series: pd.Series, key: str) -> dict:
         return base
 
     lo, hi = float(s.min()), float(s.max())
+    med = float(s.median())
     base.update(type="number",
                 dtype="int" if pd.api.types.is_integer_dtype(s) else "float",
-                min=round(lo, 6), max=round(hi, 6),
-                default=round(float(s.median()), 6), step=nice_step(lo, hi))
+                data_min=round(lo, 6), data_max=round(hi, 6),
+                step=nice_step(lo, hi))
+
+    win = PROCESS_WINDOW.get(key)
+    if win:
+        w_lo = max(lo, float(win.get("min", lo)))
+        w_hi = min(hi, float(win.get("max", hi)))
+        if w_lo > w_hi:                 # 창이 데이터 범위 밖이면 원본 유지
+            w_lo, w_hi = lo, hi
+        # 기본값은 "창 안에서 실제 관측된 값들의 중앙값".
+        # 창 안 데이터가 없으면 창의 중점을 쓴다.
+        inw = s[(s >= w_lo) & (s <= w_hi)]
+        d = float(inw.median()) if len(inw) else (w_lo + w_hi) / 2
+        base["window"] = {"min": round(w_lo, 6), "max": round(w_hi, 6),
+                          "n_in_window": int(len(inw)),
+                          "coverage": round(len(inw) / len(s) * 100, 1)}
+        base.update(min=round(w_lo, 6), max=round(w_hi, 6), default=round(d, 6))
+    else:
+        base.update(min=round(lo, 6), max=round(hi, 6), default=round(med, 6))
+
     return base
 
 
@@ -229,6 +277,7 @@ def main(merged_path: str, etching_path: str, out_path: str) -> None:
             "generated_from": merged_path,
         },
         "constants": constants,
+        "route_set": FIXED_ROUTE_SET,
         "stages": stages,
         "yield_model": {
             "id": "yield", "pkl": YIELD["pkl"],

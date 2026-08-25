@@ -462,3 +462,75 @@ input[type=range]::-moz-range-track{background:transparent}
 .rm-lock{fill:var(--n-200);opacity:.55}
 .rm-node.locked{stroke:var(--n-500);stroke-dasharray:2.5 2}
 .lane-path .locked{color:var(--n-500);font-weight:600}
+
+/* 사용 가능 챔버 다중 선택 */
+.param.chamber .seg.multi button{border-style:dashed}
+.param.chamber .seg.multi button.on{
+  border-style:solid;background:var(--a-100);border-color:var(--a-800);color:var(--a-800);
+}
+.param.chamber .seg.multi button:not(.on){color:var(--n-500);opacity:.65}
+.param.chamber.linked .seg.multi button{cursor:default}
+
+/* 경로도 - 사용 불가 챔버 */
+.rm-node.off{fill:var(--n-200);stroke:var(--n-300);stroke-dasharray:2 2}
+.rm-num.off{fill:var(--n-500);opacity:.6}
+
+/* 챔버 3상태 : 사용불가 / 사용가능 / 현재 예측 기준 */
+.param.chamber .seg.multi button.cur{
+  background:var(--a-800);border-color:var(--a-800);color:#fff;border-style:solid;
+}
+.param.chamber .seg.multi button.cur::after{content:" ●";font-size:8px;vertical-align:2px}
+
+/* 예측 기준 라인 */
+.preview-lane{
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--n-200);
+  font-family:var(--font-h);font-size:12px;font-weight:600;color:var(--n-600);
+}
+.lane-list li.active{background:var(--a-100);box-shadow:inset 2px 0 0 var(--a-800)}
+.lane-list li.active .lane-name{color:var(--a-800)}
+
+/* 챔버 : 선택(단일) / 사용 가능(다중) 두 줄 */
+.param.chamber.pick{padding-bottom:4px;border-bottom:none}
+.param.chamber.pick .param-name{font-weight:600}
+.param.chamber.avail{padding-top:4px}
+.param.chamber.avail .param-name{color:var(--n-600);font-weight:500}
+
+.param.chamber.pick .seg button.on{
+  background:var(--a-800);border-color:var(--a-800);color:#fff;
+}
+.param.chamber.pick .seg button.off{
+  opacity:.4;border-style:dashed;
+}
+.param.chamber.pick .seg button.off.on{
+  background:var(--n-500);border-color:var(--n-500);opacity:.8;
+}
+
+.topbar .btn:disabled{opacity:.5;cursor:default}
+
+/* 확정 경로 / 탐색 모드 */
+.route-mode{
+  font-family:var(--font-h);font-size:10px;font-weight:700;letter-spacing:.06em;
+  color:var(--n-600);background:var(--n-200);padding:2px 6px;border-radius:2px;
+  margin-left:6px;vertical-align:1px;
+}
+.panel-route.is-fixed .route-mode{background:var(--a-100);color:var(--a-800)}
+.panel-route.is-fixed{border-color:#cfeae6}
+.lane-y{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}
+.lane-sub{
+  font-style:normal;font-family:var(--font-h);font-size:10.5px;font-weight:500;
+  color:var(--n-500);
+}
+
+/* 최적화 결과 메시지 */
+.opt-msg{
+  margin-top:6px;font-family:var(--font-h);font-size:12px;font-weight:600;
+  font-variant-numeric:tabular-nums;line-height:1.4;
+}
+.opt-msg.up{color:var(--a-800)}
+.opt-msg.down{color:var(--neg)}
+.opt-msg.hidden{display:none}
+
+/* 모니터링 이동 버튼 */
+.topbar a.btn{text-decoration:none;display:inline-block}
+.topbar .btn-mon{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.55)}
+.topbar .btn-mon:hover{background:rgba(255,255,255,.26)}

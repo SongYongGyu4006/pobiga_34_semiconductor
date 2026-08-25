@@ -54,6 +54,34 @@
     "Target": 94,
     "Error_type": "none"
   },
+  "route_set": {
+    "source": "데이터 분석 · 윈도우 만족 고유 웨이퍼 174장",
+    "avg_yield": 91.338,
+    "note": "경로당 고유 웨이퍼 ≥ 2, 최대 표준편차 ≤ 6 제약에서 평균 수율 최대",
+    "lanes": [
+      {
+        "lane": "1",
+        "path": "1-1-1-1",
+        "yield": 90.15,
+        "sd": 1.99,
+        "wafers": 2
+      },
+      {
+        "lane": "2",
+        "path": "2-3-3-3",
+        "yield": 91.745,
+        "sd": 3.748,
+        "wafers": 3
+      },
+      {
+        "lane": "3",
+        "path": "3-2-2-2",
+        "yield": 92.12,
+        "sd": 5.93,
+        "wafers": 3
+      }
+    ]
+  },
   "stages": [
     {
       "id": "oxidation",
@@ -71,10 +99,18 @@
           "unit": "℃",
           "type": "number",
           "dtype": "float",
-          "min": 861.79,
+          "data_min": 861.79,
+          "data_max": 1348.62,
+          "step": 5,
+          "window": {
+            "min": 1266.666,
+            "max": 1348.62,
+            "n_in_window": 3075,
+            "coverage": 20.0
+          },
+          "min": 1266.666,
           "max": 1348.62,
-          "default": 1074.91,
-          "step": 5
+          "default": 1279.31
         },
         {
           "key": "Ox_ppm",
@@ -82,10 +118,18 @@
           "unit": "ppm",
           "type": "number",
           "dtype": "float",
+          "data_min": 20.75,
+          "data_max": 50.09,
+          "step": 0.1,
+          "window": {
+            "min": 20.75,
+            "max": 45.37,
+            "n_in_window": 14993,
+            "coverage": 97.5
+          },
           "min": 20.75,
-          "max": 50.09,
-          "default": 33.64,
-          "step": 0.1
+          "max": 45.37,
+          "default": 33.36
         },
         {
           "key": "Ox_Pressure",
@@ -93,10 +137,12 @@
           "unit": "Torr",
           "type": "number",
           "dtype": "float",
+          "data_min": 0.01,
+          "data_max": 0.61,
+          "step": 0.01,
           "min": 0.01,
           "max": 0.61,
-          "default": 0.21,
-          "step": 0.01
+          "default": 0.21
         },
         {
           "key": "Ox_Time",
@@ -104,10 +150,12 @@
           "unit": "min",
           "type": "number",
           "dtype": "int",
+          "data_min": 8.0,
+          "data_max": 291.0,
+          "step": 1,
           "min": 8.0,
           "max": 291.0,
-          "default": 86.0,
-          "step": 1
+          "default": 86.0
         },
         {
           "key": "Ox_Type",
@@ -168,10 +216,12 @@
           "unit": "℃",
           "type": "number",
           "dtype": "float",
+          "data_min": 190.934,
+          "data_max": 209.755,
+          "step": 0.05,
           "min": 190.934,
           "max": 209.755,
-          "default": 200.553,
-          "step": 0.05
+          "default": 200.553
         },
         {
           "key": "time_HMDS_bake",
@@ -179,10 +229,12 @@
           "unit": "sec",
           "type": "number",
           "dtype": "float",
+          "data_min": 89.643,
+          "data_max": 90.39,
+          "step": 0.01,
           "min": 89.643,
           "max": 90.39,
-          "default": 90.0,
-          "step": 0.01
+          "default": 90.0
         },
         {
           "key": "N2_HMDS",
@@ -190,10 +242,12 @@
           "unit": "sccm",
           "type": "number",
           "dtype": "float",
+          "data_min": 9.281,
+          "data_max": 23.69,
+          "step": 0.05,
           "min": 9.281,
           "max": 23.69,
-          "default": 16.28,
-          "step": 0.05
+          "default": 16.28
         },
         {
           "key": "pressure_HMDS",
@@ -201,10 +255,12 @@
           "unit": "Torr",
           "type": "number",
           "dtype": "float",
+          "data_min": 14.557,
+          "data_max": 15.526,
+          "step": 0.01,
           "min": 14.557,
           "max": 15.526,
-          "default": 15.004,
-          "step": 0.01
+          "default": 15.004
         },
         {
           "key": "temp_HMDS",
@@ -212,10 +268,12 @@
           "unit": "℃",
           "type": "number",
           "dtype": "float",
+          "data_min": 19.594,
+          "data_max": 20.429,
+          "step": 0.01,
           "min": 19.594,
           "max": 20.429,
-          "default": 20.0,
-          "step": 0.01
+          "default": 20.0
         },
         {
           "key": "spin1_rpm",
@@ -223,10 +281,12 @@
           "unit": "rpm",
           "type": "number",
           "dtype": "float",
+          "data_min": 491.918,
+          "data_max": 509.212,
+          "step": 0.05,
           "min": 491.918,
           "max": 509.212,
-          "default": 501.03,
-          "step": 0.05
+          "default": 501.03
         },
         {
           "key": "spin2_rpm",
@@ -234,10 +294,12 @@
           "unit": "rpm",
           "type": "number",
           "dtype": "float",
+          "data_min": 3864.655,
+          "data_max": 4208.817,
+          "step": 1,
           "min": 3864.655,
           "max": 4208.817,
-          "default": 4026.926,
-          "step": 1
+          "default": 4026.926
         },
         {
           "key": "spin3_rpm",
@@ -245,10 +307,18 @@
           "unit": "rpm",
           "type": "number",
           "dtype": "float",
-          "min": 4814.372,
-          "max": 5194.329,
-          "default": 5019.7915,
-          "step": 1
+          "data_min": 4814.372,
+          "data_max": 5194.329,
+          "step": 1,
+          "window": {
+            "min": 4947.144,
+            "max": 5107.455,
+            "n_in_window": 11144,
+            "coverage": 72.5
+          },
+          "min": 4947.144,
+          "max": 5107.455,
+          "default": 5026.797
         },
         {
           "key": "PR_amount",
@@ -256,10 +326,12 @@
           "unit": "",
           "type": "number",
           "dtype": "float",
+          "data_min": 4.54,
+          "data_max": 5.5,
+          "step": 0.01,
           "min": 4.54,
           "max": 5.5,
-          "default": 5.02,
-          "step": 0.01
+          "default": 5.02
         },
         {
           "key": "temp_softbake",
@@ -267,10 +339,12 @@
           "unit": "℃",
           "type": "number",
           "dtype": "float",
+          "data_min": 86.23,
+          "data_max": 96.774,
+          "step": 0.05,
           "min": 86.23,
           "max": 96.774,
-          "default": 92.05,
-          "step": 0.05
+          "default": 92.05
         },
         {
           "key": "time_softbake",
@@ -278,10 +352,12 @@
           "unit": "sec",
           "type": "number",
           "dtype": "float",
+          "data_min": 29.596,
+          "data_max": 30.371,
+          "step": 0.01,
           "min": 29.596,
           "max": 30.371,
-          "default": 30.001,
-          "step": 0.01
+          "default": 30.001
         },
         {
           "key": "photo_soft_Chamber",
@@ -330,10 +406,12 @@
           "unit": "mJ/cm²",
           "type": "number",
           "dtype": "float",
+          "data_min": 103.274,
+          "data_max": 112.223,
+          "step": 0.05,
           "min": 103.274,
           "max": 112.223,
-          "default": 108.248,
-          "step": 0.05
+          "default": 108.248
         },
         {
           "key": "Resolution",
@@ -341,10 +419,12 @@
           "unit": "nm",
           "type": "number",
           "dtype": "float",
+          "data_min": 441.529,
+          "data_max": 583.062,
+          "step": 0.5,
           "min": 441.529,
           "max": 583.062,
-          "default": 513.683,
-          "step": 0.5
+          "default": 513.683
         },
         {
           "key": "UV_type",
@@ -433,10 +513,12 @@
           "unit": "Å",
           "type": "number",
           "dtype": "float",
+          "data_min": 5667.0,
+          "data_max": 5764.0,
+          "step": 0.5,
           "min": 5667.0,
           "max": 5764.0,
-          "default": 5714.0,
-          "step": 0.5
+          "default": 5714.0
         },
         {
           "key": "Thin_F2",
@@ -444,10 +526,12 @@
           "unit": "Å",
           "type": "number",
           "dtype": "float",
+          "data_min": 3594.0,
+          "data_max": 3723.0,
+          "step": 0.5,
           "min": 3594.0,
           "max": 3723.0,
-          "default": 3650.0,
-          "step": 0.5
+          "default": 3650.0
         },
         {
           "key": "Thin_F3",
@@ -455,10 +539,12 @@
           "unit": "Å",
           "type": "number",
           "dtype": "float",
+          "data_min": 1205.0,
+          "data_max": 1761.0,
+          "step": 5,
           "min": 1205.0,
           "max": 1761.0,
-          "default": 1465.0,
-          "step": 5
+          "default": 1465.0
         },
         {
           "key": "Temp_Etching",
@@ -466,10 +552,12 @@
           "unit": "℃",
           "type": "number",
           "dtype": "float",
+          "data_min": 67.914,
+          "data_max": 73.34,
+          "step": 0.05,
           "min": 67.914,
           "max": 73.34,
-          "default": 71.208,
-          "step": 0.05
+          "default": 71.208
         },
         {
           "key": "Source_Power",
@@ -477,10 +565,12 @@
           "unit": "W",
           "type": "number",
           "dtype": "float",
+          "data_min": 49.149,
+          "data_max": 53.526,
+          "step": 0.05,
           "min": 49.149,
           "max": 53.526,
-          "default": 51.256,
-          "step": 0.05
+          "default": 51.256
         },
         {
           "key": "Etching_Chamber",
@@ -543,10 +633,12 @@
           "unit": "eV",
           "type": "number",
           "dtype": "float",
+          "data_min": 29604.103,
+          "data_max": 33675.751,
+          "step": 50,
           "min": 29604.103,
           "max": 33675.751,
-          "default": 32200.397,
-          "step": 50
+          "default": 32200.397
         },
         {
           "key": "Ion_Temp",
@@ -554,10 +646,12 @@
           "unit": "℃",
           "type": "number",
           "dtype": "float",
+          "data_min": 97.649,
+          "data_max": 107.547,
+          "step": 0.05,
           "min": 97.649,
           "max": 107.547,
-          "default": 103.29,
-          "step": 0.05
+          "default": 103.29
         },
         {
           "key": "Furnace_Temp",
@@ -565,10 +659,18 @@
           "unit": "℃",
           "type": "number",
           "dtype": "int",
-          "min": 854.0,
-          "max": 944.0,
-          "default": 904.0,
-          "step": 0.5
+          "data_min": 854.0,
+          "data_max": 944.0,
+          "step": 0.5,
+          "window": {
+            "min": 865.0,
+            "max": 917.0,
+            "n_in_window": 11804,
+            "coverage": 76.8
+          },
+          "min": 865.0,
+          "max": 917.0,
+          "default": 902.0
         },
         {
           "key": "RTA_Temp",
@@ -576,10 +678,12 @@
           "unit": "℃",
           "type": "number",
           "dtype": "int",
+          "data_min": 148.0,
+          "data_max": 162.0,
+          "step": 0.05,
           "min": 148.0,
           "max": 162.0,
-          "default": 155.0,
-          "step": 0.05
+          "default": 155.0
         },
         {
           "key": "Ion_Chamber",

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생산 운영 모니터링</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/static/style.css?v=77">
+<link rel="stylesheet" href="/static/monitor.css?v=77">
+</head>
+<body class="mon">
+
+<header class="topbar">
+  <div class="brand">
+    <img class="brand-logo" src="/static/posco.png?v=15" alt="POSCO">
+    <span class="brand-name">생산 운영 모니터링</span>
+    <span class="brand-sub">LIVE LINE MONITOR</span>
+  </div>
+  <div class="topbar-right">
+    <label class="lot-pick">LOT
+      <select id="lot-select"></select>
+    </label>
+    <button id="btn-start" class="btn">투입</button>
+    <button id="btn-play" class="btn">시작</button>
+    <button id="btn-step" class="btn">한 틱</button>
+    <label class="lot-pick">속도
+      <select id="speed-select">
+        <option value="1600">0.5x</option>
+        <option value="800" selected>1x</option>
+        <option value="400">2x</option>
+        <option value="150">5x</option>
+      </select>
+    </label>
+    <a class="btn" href="/">시뮬레이터</a>
+  </div>
+</header>
+
+<main class="mon-layout">
+  <section class="line">
+    <div class="panel panel-line">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="kicker">공정 라인 <b class="tick-badge" id="tick-badge">tick 0</b></span>
+      <div id="line-stages"></div>
+    </div>
+
+    <div class="panel">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="kicker">완료 Wafer History</span>
+      <ul class="hist" id="history"></ul>
+    </div>
+  </section>
+
+  <aside class="mon-side">
+    <div class="panel panel-yield">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="kicker">LOT 생산 현황</span>
+      <div class="lot-name" id="lot-name">—</div>
+      <div class="prog-bar" title="채워진 부분 = 완료된 Wafer 비율">
+        <div id="prog-fill" class="prog-fill"></div>
+      </div>
+      <div class="prog-foot">
+        <span id="prog-text">0%</span>
+        <span id="avg-yield" class="delta">—</span>
+      </div>
+      <p class="prog-hint">채워진 부분 = 완료된 Wafer 비율</p>
+      <div class="mon-stats" id="mon-stats"></div>
+      <div class="gain-box hidden" id="gain-box"></div>
+    </div>
+
+    <div class="panel">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="kicker">Wafer 경로 · 상세</span>
+      <p class="hint" id="detail-hint">라인이나 History 의 Wafer 를 클릭하십시오.</p>
+      <div id="trace"></div>
+      <div id="detail"></div>
+    </div>
+  </aside>
+</main>
+
+<script src="/static/monitor.js?v=77"></script>
+</body>
+</html>

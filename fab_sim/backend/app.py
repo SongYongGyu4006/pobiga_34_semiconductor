@@ -13,18 +13,21 @@ import json
 import os
 from typing import Any, Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from models.base import build_registry
+from monitor import MonitorEngine
 from pipeline import Pipeline
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, "..", "frontend")
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.json")
+DATA_PATH = os.environ.get(
+    "FAB_DATA", os.path.join(BASE_DIR, "..", "data", "merged_all_processes_derived.csv"))
 
 
 def load_schema() -> Dict[str, Any]:
@@ -35,6 +38,8 @@ def load_schema() -> Dict[str, Any]:
 schema = load_schema()
 registry = build_registry(schema)
 pipeline = Pipeline(schema, registry)
+
+monitor = MonitorEngine(pipeline, schema, DATA_PATH) if os.path.exists(DATA_PATH) else None
 
 app = FastAPI(title=schema["meta"]["title"])
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
@@ -54,8 +59,10 @@ class RecommendRequest(BaseModel):
 class RouteSetRequest(BaseModel):
     params: Dict[str, Any] = {}
     from_stage: str | None = None       # 이 공정부터 재탐색
-    lanes: list[str] | None = None      # 현재 세 라인의 경로 (앞 공정 고정용)
+    lanes: list[str] | None = None      # 현재 라인들의 경로 (앞 공정 고정용)
+    available: Dict[str, list] | None = None   # 공정별 사용 가능 챔버
     top_n: int = 3
+    mode: str = "auto"                  # auto | fixed | search
 
 
 @app.get("/api/schema")
@@ -86,7 +93,76 @@ def recommend(req: RecommendRequest):
 @app.post("/api/routeset")
 def routeset(req: RouteSetRequest):
     """세 라인을 동시 운용한다는 전제로 챔버가 겹치지 않는 최적 경로 조합을 반환."""
-    return pipeline.recommend_set(req.params, req.from_stage, req.lanes, req.top_n)
+    return pipeline.recommend_set(req.params, req.from_stage, req.lanes,
+                                  req.available, req.top_n, req.mode)
+
+
+class OptimizeRequest(BaseModel):
+    params: Dict[str, Any] = {}
+    direction: str = "max"              # "max" | "min"
+    max_rounds: int = 15
+    samples: int = 9
+    available: Dict[str, list] | None = None
+
+
+@app.post("/api/optimize")
+def optimize(req: OptimizeRequest):
+    """경로 조합의 평균 수율이 최대(최저)가 되도록 파라미터를 탐색한다."""
+    return pipeline.optimize(req.params, req.direction, req.max_rounds,
+                             req.samples, req.available)
+
+
+# ---------------------------------------------------------------- 생산 모니터링
+class MonitorStartRequest(BaseModel):
+    lot: int | None = None
+    limit: int = 27
+
+
+class MonitorTickRequest(BaseModel):
+    n: int = 1
+
+
+def _need_monitor():
+    if monitor is None:
+        raise HTTPException(503, f"원본 CSV 를 찾을 수 없습니다: {DATA_PATH}")
+    return monitor
+
+
+@app.post("/api/monitor/start")
+def monitor_start(req: MonitorStartRequest):
+    return _need_monitor().start(req.lot, req.limit)
+
+
+@app.post("/api/monitor/tick")
+def monitor_tick(req: MonitorTickRequest):
+    return _need_monitor().tick(req.n)
+
+
+class ChamberRequest(BaseModel):
+    stage: str
+    chamber: str
+    enabled: bool
+
+
+@app.post("/api/monitor/chamber")
+def monitor_chamber(req: ChamberRequest):
+    return _need_monitor().set_chamber(req.stage, req.chamber, req.enabled)
+
+
+@app.get("/api/monitor/state")
+def monitor_state():
+    return _need_monitor().state()
+
+
+@app.get("/api/monitor/forecast/{wid}")
+def monitor_forecast(wid: str):
+    """라인을 그대로 굴려 실제 배정까지 반영한 정밀 예측을 반환한다."""
+    return _need_monitor().forecast_precise(wid)
+
+
+@app.get("/api/monitor/wafer/{wid}")
+def monitor_wafer(wid: str):
+    return _need_monitor().wafer_detail(wid)
 
 
 @app.post("/api/reload")
@@ -110,3 +186,7 @@ if os.path.isdir(FRONTEND_DIR):
     @app.get("/")
     def index():
         return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+    @app.get("/monitor")
+    def monitor_page():
+        return FileResponse(os.path.join(FRONTEND_DIR, "monitor.html"))

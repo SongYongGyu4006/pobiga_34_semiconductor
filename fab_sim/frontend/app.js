@@ -20,6 +20,9 @@ let timer = null;
 let inflight = null;
 
 let paramStage = {};            // {param_key: stage_id}
+let chamberKeys = [];           // 챔버 파라미터 키 목록
+let avail = {};                 // {chamber_key: [...]} 사용 가능 챔버
+let previewLane = 0;            // 좌측 단건 예측이 어느 라인 기준인지
 let lastStage = null;           // 마지막으로 조절한 공정
 let routeTimer = null;
 let routeInflight = null;
@@ -45,8 +48,11 @@ async function init() {
     `기본값 ${fmt(baselineYield, 2)}%`;
 
   syncMirrors();
+  updateChamberMarkers();
   applyPrediction(boot.prediction);
   document.getElementById("reset-btn").onclick = reset;
+  document.getElementById("opt-max").onclick = () => optimize("max");
+  document.getElementById("opt-min").onclick = () => optimize("min");
   scheduleRoute();
 }
 
@@ -64,7 +70,14 @@ function renderStages() {
   root.innerHTML = "";
 
   paramStage = {};
-  orderedStages().forEach(s => s.params.forEach(p => { paramStage[p.key] = s.id; }));
+  chamberKeys = [];
+  orderedStages().forEach(st => {
+    st.params.forEach(p => { paramStage[p.key] = st.id; });
+    st.params.filter(p => /hamber/.test(p.key)).forEach(p => {
+      chamberKeys.push(p.key);
+      if (!avail[p.key]) avail[p.key] = [...p.options];
+    });
+  });
 
   orderedStages().forEach((stage, i) => {
     const el = document.createElement("section");
@@ -117,7 +130,12 @@ function renderStages() {
     const derived = stage.derived || [];
 
     stage.params.forEach(p => {
-      body.appendChild(buildParam(p));
+      if (/hamber/.test(p.key)) {
+        body.appendChild(buildChamberPick(p));
+        body.appendChild(buildChamberAvail(p));
+      } else {
+        body.appendChild(buildParam(p));
+      }
       derived.filter(d => d.after === p.key)
              .forEach(d => body.appendChild(buildDerived(d)));
     });
@@ -135,6 +153,60 @@ function renderStages() {
         <span class="s-unit">${o.unit || ""}</span>
       </span>
     </li>`).join("");
+}
+
+/* 챔버 선택 : 좌측 단건 예측이 사용할 챔버 (단일 선택) */
+function buildChamberPick(p) {
+  const wrap = document.createElement("div");
+  wrap.className = "param chamber pick";
+  const linked = !!p.mirror;
+  if (linked) wrap.classList.add("linked");
+
+  wrap.innerHTML = `
+    <div class="param-label">
+      <span class="param-name">챔버 선택</span>
+      <span class="${linked ? "auto" : "mod"}">${linked ? "LINK" : "MOD"}</span>
+    </div>
+    <div class="param-ctrl"><div class="seg" data-pick="${p.key}"></div></div>`;
+
+  const seg = wrap.querySelector(".seg");
+  p.options.forEach(opt => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = opt;
+    b.className = String(opt) === String(params[p.key] ?? p.default) ? "on" : "";
+    if (linked) b.disabled = true;
+    else b.onclick = () => pickChamber(p, String(opt));
+    seg.appendChild(b);
+  });
+  return wrap;
+}
+
+/* 사용 가능 챔버 : 경로 조합 탐색 대상 (다중 선택) */
+function buildChamberAvail(p) {
+  const wrap = document.createElement("div");
+  wrap.className = "param chamber avail";
+  const linked = !!p.mirror;
+  if (linked) wrap.classList.add("linked");
+
+  wrap.innerHTML = `
+    <div class="param-label">
+      <span class="param-name">사용 가능</span>
+      <span class="${linked ? "auto" : "mod"}">${linked ? "LINK" : "SEL"}</span>
+    </div>
+    <div class="param-ctrl"><div class="seg multi" data-seg="${p.key}"></div></div>`;
+
+  const seg = wrap.querySelector(".seg");
+  p.options.forEach(opt => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = opt;
+    b.className = avail[p.key].includes(String(opt)) ? "on" : "";
+    if (linked) b.disabled = true;
+    else b.onclick = () => toggleChamber(p, String(opt), wrap);
+    seg.appendChild(b);
+  });
+  return wrap;
 }
 
 /* 파생값 — 사용자가 직접 못 바꾸고, 위쪽 슬라이더로만 변한다 */
@@ -210,7 +282,7 @@ function buildParam(p) {
           <div class="fill"></div>
           <div class="ticks"></div>
           <input type="range" min="${p.min}" max="${p.max}" step="${p.step}"
-                 value="${p.default}" data-key="${p.key}" aria-label="${p.name}">
+                 value="${params[p.key] ?? p.default}" data-key="${p.key}" aria-label="${p.name}">
         </div>
         <div class="gauge-scale">
           <span>${fmt(p.min, dec)}</span><span>${fmt(p.max, dec)}</span>
@@ -218,7 +290,7 @@ function buildParam(p) {
       </div>
       <div class="num-wrap">
         <input type="text" inputmode="decimal" class="param-val" data-val="${p.key}"
-               value="${toInput(p.default, dec)}" aria-label="${p.name} 값"
+               value="${toInput(params[p.key] ?? p.default, dec)}" aria-label="${p.name} 값"
                autocomplete="off" spellcheck="false">
         <div class="num-spin">
           <button type="button" class="spin-up" tabindex="-1" aria-label="${p.name} 증가">
@@ -233,7 +305,7 @@ function buildParam(p) {
 
   const range = wrap.querySelector("input[type=range]");
   const num = wrap.querySelector("input.param-val");
-  paintFill(wrap.querySelector(".fill"), p, p.default);
+  paintFill(wrap.querySelector(".fill"), p, params[p.key] ?? p.default);
 
   range.oninput = () => applyNumeric(p, wrap, parseFloat(range.value));
   num.addEventListener("focus", () => num.select());
@@ -267,15 +339,63 @@ function mirrorSourceName(sourceKey) {
   return sourceKey;
 }
 
-/* 연동 파라미터를 원본 값에 맞춘다 */
+/* 현재 선택된 챔버를 '챔버 선택' 줄에 반영 */
+function updateChamberMarkers() {
+  chamberKeys.forEach(key => {
+    const pick = document.querySelector(`[data-pick="${key}"]`);
+    if (pick) pick.querySelectorAll("button").forEach(b => {
+      b.classList.toggle("on", b.textContent === String(params[key]));
+      b.classList.toggle("off", !(avail[key] || []).includes(b.textContent));
+    });
+  });
+}
+
+/* 챔버 선택 (단건 예측 기준) */
+function pickChamber(p, opt) {
+  params[p.key] = opt;
+  previewLane = -1;                       // 수동 선택 → 라인 연동 해제
+  lastStage = paramStage[p.key] || lastStage;
+  syncMirrors();
+  updateChamberMarkers();
+  markActiveLane();
+  schedulePredict();
+}
+
+/* 사용 가능 챔버 토글 (최소 1개는 남긴다) */
+function toggleChamber(p, opt, wrap) {
+  const cur = avail[p.key] || [];
+  const next = cur.includes(opt) ? cur.filter(v => v !== opt) : [...cur, opt];
+  if (!next.length) return;
+
+  avail[p.key] = p.options.filter(o => next.includes(String(o)));
+  if (!avail[p.key].includes(String(params[p.key])))
+    params[p.key] = avail[p.key][0];      // 선택했던 챔버가 꺼지면 첫 가용으로
+
+  wrap.querySelectorAll(".seg button").forEach(b =>
+    b.classList.toggle("on", avail[p.key].includes(b.textContent)));
+  wrap.classList.toggle("changed", avail[p.key].length !== p.options.length);
+
+  lastStage = paramStage[p.key] || lastStage;
+  syncMirrors();
+  updateChamberMarkers();
+  schedulePredict();
+  scheduleRoute();
+}
+
+/* 연동 파라미터를 원본 값·가용 목록에 맞춘다 */
 function syncMirrors() {
   mirrorParams().forEach(({ key, source }) => {
+    if (avail[source]) {
+      avail[key] = [...avail[source]];
+      const seg = document.querySelector(`[data-seg="${key}"]`);
+      if (seg) seg.querySelectorAll("button").forEach(b =>
+        b.classList.toggle("on", avail[key].includes(b.textContent)));
+    }
     const v = params[source];
     if (v === undefined) return;
     params[key] = v;
     const seg = document.querySelector(`[data-seg="${key}"]`);
-    if (!seg) return;
-    seg.querySelectorAll("button").forEach(b =>
+    if (seg && !avail[source]) seg.querySelectorAll("button").forEach(b =>
       b.classList.toggle("on", b.textContent === String(v)));
   });
 }
@@ -363,7 +483,7 @@ async function predict() {
 }
 
 // ------------------------------------------------------------------ 챔버 경로 조합
-const LANE_COLORS = ["var(--a-800)", "var(--a-500)", "var(--n-700)"];
+const LANE_COLORS = ["var(--a-800)", "var(--a-500)", "var(--n-700)", "var(--a-900)"];
 
 function scheduleRoute() {
   clearTimeout(routeTimer);
@@ -382,6 +502,7 @@ async function fetchRoute() {
         from_stage: lastStage,
         lanes: lastRoute && lastRoute.ok
           ? lastRoute.best.lanes.map(l => l.path) : null,
+        available: avail,
         top_n: 3,
       }),
       signal: routeInflight.signal,
@@ -399,11 +520,16 @@ function renderRoute(r) {
   if (!r.ok) { set("#route-scope", r.reason || "조합을 만들 수 없습니다."); return; }
 
   const best = r.best;
-  const locked = r.locked_stages.length
-    ? `${r.locked_stages.map(shortStage).join(" · ")} 고정 · ` : "";
-  set("#route-scope",
-      `${locked}${r.search_stages.map(shortStage).join(" · ")} 재탐색 · `
-      + `조합 ${r.sets_evaluated}개 평가`);
+  const fixed = r.mode === "fixed";
+  document.querySelector(".panel-route").classList.toggle("is-fixed", fixed);
+
+  set("#route-scope", fixed
+    ? `${r.source}${r.note ? " · " + r.note : ""}`
+    : `라인 ${r.lane_count}개 (병목: ${r.bottleneck.map(shortStage).join(" · ")}) · `
+      + `${r.locked_stages.length ? r.locked_stages.map(shortStage).join(" · ") + " 고정 · " : ""}`
+      + `${r.search_stages.map(shortStage).join(" · ")} 재탐색 · 조합 ${r.sets_evaluated}개`);
+
+  set("#route-mode", fixed ? "확정 경로" : "모델 탐색");
 
   drawRouteMap(r, best);
 
@@ -413,19 +539,25 @@ function renderRoute(r) {
       <span class="lane-name">라인 ${ln.lane}</span>
       <span class="lane-path"><b class="locked">${ln.fixed.join("-")}</b>${
         ln.fixed.length && ln.searched.length ? "-" : ""}${ln.searched.join("-")}</span>
-      <span class="lane-y">${fmt(ln.yield, 2)}%</span>
+      <span class="lane-y">${fmt(ln.yield, 2)}%${
+        fixed ? `<em class="lane-sub">모델 ${fmt(ln.model_yield, 1)}%</em>` : ""}</span>
     </li>`).join("");
 
   document.querySelectorAll("#lane-list li").forEach(li => {
     li.onclick = () => applyLane(Number(li.dataset.lane));
-    li.title = "클릭하면 이 라인의 챔버를 적용합니다";
+    li.title = "클릭하면 이 라인 기준으로 예측을 봅니다";
   });
 
+  if (previewLane >= best.lanes.length) previewLane = -1;
+  markActiveLane();
+  updateChamberMarkers();
+
   set("#set-avg", `${fmt(best.avg_yield, 2)}%`);
-  set("#set-min", `최저 ${fmt(best.min_yield, 2)}%`);
-  set("#route-cur", r.current.path);
-  set("#route-cur-y", r.current.yield == null
-    ? "고정 구간 밖" : `${fmt(r.current.yield, 2)}%`);
+  set("#set-min", fixed ? "데이터 실측" : `최저 ${fmt(best.min_yield, 2)}%`);
+  set("#route-cur", fixed ? `${fmt(best.avg_model_yield, 2)}%` : r.current.path);
+  set("#route-cur-y", fixed ? "현재 조건 모델 예측"
+    : (r.current.yield == null ? "고정 구간 밖" : `${fmt(r.current.yield, 2)}%`));
+  set("#route-cur-tag", fixed ? "모델" : "현재");
   set("#route-foot",
       `공정 순서: ${r.stages.map(s => s.name).join(" → ")}`
       + (r.mirrors.length ? " · 이온 챔버는 식각에 연동" : ""));
@@ -435,7 +567,7 @@ function renderRoute(r) {
 function drawRouteMap(r, best) {
   const W = 276, PAD_L = 30, PAD_T = 26;
   const cols = r.stages.length;
-  const rows = r.stages[0].options.length;
+  const rows = Math.max(...r.stages.map(s => s.options.length));
   const dx = (W - PAD_L - 24) / (cols - 1);
   const dy = 42;
   const H = PAD_T + (rows - 1) * dy + 30;
@@ -457,13 +589,16 @@ function drawRouteMap(r, best) {
   let nodes = "";
   for (let i = 0; i < cols; i++)
     for (let j = 0; j < rows; j++)
-      nodes += `<circle class="rm-node${i < lock ? " locked" : ""}" cx="${cx(i)}" cy="${cy(j)}" r="11"/>
-                <text class="rm-num" x="${cx(i)}" y="${cy(j)}" text-anchor="middle"
+      {
+      const off = !r.stages[i].available.includes(r.stages[i].options[j]);
+      nodes += `<circle class="rm-node${i < lock ? " locked" : ""}${off ? " off" : ""}" cx="${cx(i)}" cy="${cy(j)}" r="11"/>
+                <text class="rm-num${off ? " off" : ""}" x="${cx(i)}" y="${cy(j)}" text-anchor="middle"
                       dominant-baseline="central">${r.stages[i].options[j]}</text>`;
+      }
 
   const lines = best.lanes.map((ln, k) => {
     const idx = ln.path.split("-").map((v, i) => r.stages[i].options.indexOf(v));
-    const off = (k - (rows - 1) / 2) * 3.2;
+    const off = (k - (best.lanes.length - 1) / 2) * 3.2;
     const pts = idx.map((j, i) => `${cx(i)},${cy(j) + off}`).join(" ");
     return `<polyline class="rm-line" points="${pts}" stroke="${LANE_COLORS[k]}"/>`;
   }).join("");
@@ -477,21 +612,27 @@ function shortStage(name) {
              .replace("Soft Bake", "베이크").replace("Lithography", "리소");
 }
 
-/* 라인 하나를 클릭하면 그 챔버 조합을 슬라이더에 반영 */
+/* 라인을 클릭하면 좌측 단건 예측의 기준 라인만 바꾼다.
+   사용 가능 챔버 설정(avail)은 건드리지 않는다. */
 function applyLane(k) {
   if (!lastRoute || !lastRoute.ok) return;
   const lane = lastRoute.best.lanes[k];
-  Object.entries(lane.chambers).forEach(([key, val]) => {
-    params[key] = val;
-    const seg = document.querySelector(`[data-seg="${key}"]`);
-    if (!seg) return;
-    seg.querySelectorAll("button").forEach(b =>
-      b.classList.toggle("on", b.textContent === String(val)));
-    seg.closest(".param").classList.toggle("changed", String(val) !== String(defaults[key]));
-  });
+  if (!lane) return;
+
+  previewLane = k;
+  Object.entries(lane.chambers).forEach(([key, val]) => { params[key] = val; });
   syncMirrors();
+  updateChamberMarkers();
+  markActiveLane();
   predict();
-  scheduleRoute();
+}
+
+function markActiveLane() {
+  document.querySelectorAll("#lane-list li").forEach((li, i) =>
+    li.classList.toggle("active", i === previewLane));
+  const lane = lastRoute && lastRoute.ok && previewLane >= 0
+    ? lastRoute.best.lanes[previewLane] : null;
+  set("#preview-lane", lane ? `라인 ${lane.lane} (${lane.path}) 기준` : "직접 선택한 챔버 기준");
 }
 
 // ------------------------------------------------------------------ 결과 반영
@@ -556,8 +697,46 @@ function processSigma() {
   return n ? acc / n * 2.5 : 0;
 }
 
+/* 수율 최대 / 최저 파라미터 탐색 */
+async function optimize(direction) {
+  const btns = [document.getElementById("opt-max"), document.getElementById("opt-min")];
+  btns.forEach(b => b.disabled = true);
+  toggleLoading(true);
+  try {
+    const res = await fetch(`${API}/api/optimize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ params, direction, available: avail }),
+    });
+    const r = await res.json();
+    Object.entries(r.params).forEach(([k, v]) => {
+      if (k in params) params[k] = v;
+    });
+    renderStages();
+    syncMirrors();
+    updateChamberMarkers();
+    applyPrediction(r.prediction);
+    const msg = document.getElementById("opt-msg");
+    msg.classList.remove("hidden");
+    msg.className = "opt-msg " + (direction === "max" ? "up" : "down");
+    msg.textContent =
+      `${direction === "max" ? "최대" : "최저"} 평균 수율 탐색 · `
+      + `${fmt(r.start_yield, 2)}% → ${fmt(r.final_yield, 2)}% `
+      + `(${r.rounds}라운드${r.converged ? " 수렴" : " 미수렴"})`;
+    scheduleRoute();
+  } catch (e) {
+    console.error(e);
+  } finally {
+    btns.forEach(b => b.disabled = false);
+    toggleLoading(false);
+  }
+}
+
 function reset() {
+  document.getElementById("opt-msg").classList.add("hidden");
   params = { ...defaults };
+  avail = {};
+  previewLane = 0;
   renderStages();
   document.getElementById("yield-base").textContent =
     `기본값 ${fmt(baselineYield, 2)}%`;

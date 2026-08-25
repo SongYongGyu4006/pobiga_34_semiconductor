@@ -61,6 +61,28 @@ class SklearnPredictor(Predictor):
         X = pd.DataFrame(row, columns=self.feature_keys)
         return float(self.pipeline.predict(X)[0])
 
+    def subsample(self, n_trees: int) -> "SklearnPredictor":
+        """
+        트리 일부만 사용하는 가벼운 사본을 만든다 (예측 지연 단축용).
+        트리 객체는 공유하므로 메모리 부담이 없다. 예측이 근사가 되므로
+        시뮬레이션·예측 미리보기 같은 용도에만 쓴다.
+        """
+        import copy
+        try:
+            pipe = copy.copy(self.pipeline)
+            steps = list(pipe.steps)
+            name, est = steps[-1]
+            if not hasattr(est, "estimators_") or len(est.estimators_) <= n_trees:
+                return self
+            fast = copy.copy(est)
+            fast.estimators_ = est.estimators_[:n_trees]
+            fast.n_estimators = n_trees
+            pipe.steps = steps[:-1] + [(name, fast)]
+            return SklearnPredictor(self.name + "~fast", pipe,
+                                    self.feature_keys, self.constants)
+        except Exception:  # noqa: BLE001
+            return self
+
     def predict_frame(self, df: pd.DataFrame):
         cols = {}
         for k in self.feature_keys:

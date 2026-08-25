@@ -65,6 +65,8 @@ class Pipeline:
         info = {}
         for st in self.stages:
             for d in st.get("derived", []):
+                if any(x not in ctx for x in d["args"]):
+                    continue          # 원본에 파생 재료가 없으면 기존 값을 그대로 둔다
                 a, b = (ctx[x] for x in d["args"])
                 ctx[d["key"]] = OPS[d["op"]](a, b)
                 info[d["key"]] = {
@@ -112,8 +114,14 @@ class Pipeline:
         }
 
     # ------------------------------------------------------------------ 배치
-    def run_frame(self, rows: List[Dict[str, Any]]) -> pd.DataFrame:
-        """여러 파라미터 조합을 모델마다 한 번씩만 호출해 계산한다."""
+    def run_frame(self, rows: List[Dict[str, Any]],
+                  skip: Optional[set] = None) -> pd.DataFrame:
+        """
+        여러 파라미터 조합을 모델마다 한 번씩만 호출해 계산한다.
+        skip 에 넣은 모델은 건너뛴다 (예: 최종 수율에 쓰이지 않는 선택비).
+        예측 비용은 행 수보다 호출 횟수에 좌우되므로, 가능한 한 크게 묶어 부른다.
+        """
+        skip = skip or set()
         ctxs = []
         for r in rows:
             c = self.merge(r)
@@ -123,6 +131,8 @@ class Pipeline:
 
         for st in self.stages:
             for m in st["models"]:
+                if m["id"] in skip:
+                    continue
                 df[m["output"]["key"]] = self.registry[m["id"]].predict_frame(df)
 
         yc = self.yield_cfg
@@ -216,38 +226,132 @@ class Pipeline:
         }
 
 
-    # ------------------------------------------- 3개 라인 동시 운용 경로 조합
+    # ------------------------------------------- 동시 운용 경로 조합
+    # -------------------------------------------------- 확정 경로 (문서 결과)
+    def fixed_route_set(self, params: Dict[str, Any],
+                        available: Optional[Dict[str, List[str]]] = None
+                        ) -> Optional[Dict[str, Any]]:
+        """
+        분석으로 확정된 경로 조합을 그대로 돌려준다.
+        사용 불가 챔버 때문에 성립하지 않으면 None (호출부가 탐색으로 대체).
+        """
+        cfg = self.schema.get("route_set")
+        if not cfg:
+            return None
+
+        chambers = self.chamber_stages()
+        available = available or {}
+        avail = []
+        for c in chambers:
+            sel = [str(v) for v in available.get(c["key"], []) if str(v) in c["options"]]
+            avail.append(sel or list(c["options"]))
+
+        paths = [tuple(str(l["path"]).split("-")) for l in cfg["lanes"]]
+        if any(len(p) != len(chambers) for p in paths):
+            return None
+        for p in paths:
+            if any(p[i] not in avail[i] for i in range(len(chambers))):
+                return None
+
+        base = self.merge(params)
+        rows = []
+        for p in paths:
+            r = dict(base)
+            for c, v in zip(chambers, p):
+                r[c["key"]] = v
+            rows.append(r)
+        df = self.run_frame(rows).reset_index(drop=True)
+
+        lanes_out = []
+        for i, (cfg_lane, p) in enumerate(zip(cfg["lanes"], paths)):
+            lanes_out.append({
+                "lane": cfg_lane["lane"],
+                "path": "-".join(p),
+                "fixed": list(p),
+                "searched": [],
+                "chambers": {c["key"]: v for c, v in zip(chambers, p)},
+                "yield": round(float(cfg_lane["yield"]), 3),
+                "sd": cfg_lane.get("sd"),
+                "wafers": cfg_lane.get("wafers"),
+                "model_yield": round(float(df.loc[i, "yield_rate"]), 3),
+                "target": round(float(df.loc[i, "Target"]), 2),
+            })
+
+        cur_path = tuple(str(base[c["key"]]) for c in chambers)
+        best = {
+            "rank": 1,
+            "avg_yield": round(float(cfg["avg_yield"]), 3),
+            "min_yield": round(min(l["yield"] for l in lanes_out), 3),
+            "avg_model_yield": round(float(df["yield_rate"].mean()), 3),
+            "lanes": lanes_out,
+        }
+
+        return {
+            "ok": True,
+            "mode": "fixed",
+            "source": cfg.get("source", ""),
+            "note": cfg.get("note", ""),
+            "stages": [{"stage": c["stage"], "name": c["name"], "key": c["key"],
+                        "options": c["options"], "available": avail[i]}
+                       for i, c in enumerate(chambers)],
+            "mirrors": [{"key": d, "source": s} for d, s in self._mirror.items()],
+            "lane_count": len(lanes_out),
+            "bottleneck": [],
+            "locked_upto": len(chambers),
+            "locked_stages": [c["name"] for c in chambers],
+            "search_stages": [],
+            "paths_evaluated": len(paths),
+            "sets_evaluated": 1,
+            "current": {"path": "-".join(cur_path), "yield": None},
+            "best": best,
+            "top": [best],
+        }
+
     def recommend_set(self, params: Dict[str, Any],
                       from_stage: Optional[str] = None,
                       lanes: Optional[List[str]] = None,
-                      top_n: int = 3) -> Dict[str, Any]:
+                      available: Optional[Dict[str, List[str]]] = None,
+                      top_n: int = 3,
+                      mode: str = "auto") -> Dict[str, Any]:
         """
-        세 챔버를 동시에 운용한다는 전제로, 서로 챔버가 겹치지 않는
-        경로 3개의 조합을 찾는다.
+        여러 챔버를 동시에 운용한다는 전제로, 서로 챔버가 겹치지 않는
+        경로 조합을 찾는다.
 
-        from_stage : 이 공정부터 재탐색한다. 그 앞 공정의 챔버 배정은
-                     lanes(현재 조합)를 그대로 유지한다.
-        lanes      : 현재 세 라인의 전체 경로 문자열 목록 (예: ["1-2-1-2", ...])
-                     없으면 라인 l 이 모든 앞 공정에서 챔버 l 을 쓰는 것으로 본다.
+        from_stage : 이 공정부터 재탐색. 앞 공정 배정은 lanes 를 그대로 유지
+        lanes      : 현재 라인들의 전체 경로 (예: ["1-2-1-2", ...])
+        available  : 공정별 사용 가능 챔버 {chamber_key: ["1","3"], ...}
 
-        제약 : 재탐색 구간의 각 공정에서 세 경로의 챔버가 모두 달라야 한다
-        목적 : 세 경로 예측 수율의 평균 최대화
+        라인 수 = 각 공정의 사용 가능 챔버 개수 중 최솟값
+        제약     = 각 공정에서 라인끼리 챔버가 겹치지 않음
+        목적     = 라인 예측 수율의 평균 최대화
         """
+        if mode in ("auto", "fixed"):
+            fixed = self.fixed_route_set(params, available)
+            if fixed is not None:
+                return fixed
+            if mode == "fixed":
+                return {"ok": False,
+                        "reason": "확정 경로에 사용 불가 챔버가 포함되어 있습니다."}
+
         base = self.merge(params)
         chambers = self.chamber_stages()
-        opts = [c["options"] for c in chambers]
-        n = len(opts[0])
+        available = available or {}
 
-        if any(len(o) != n for o in opts):
-            return {"ok": False,
-                    "reason": "공정마다 챔버 개수가 달라 겹치지 않는 조합을 만들 수 없습니다."}
+        # ---- 공정별 사용 가능 챔버 ----
+        avail = []
+        for c in chambers:
+            sel = [str(v) for v in available.get(c["key"], []) if str(v) in c["options"]]
+            avail.append(sel or list(c["options"]))
+
+        n = min(len(a) for a in avail)
+        if n < 1:
+            return {"ok": False, "reason": "사용 가능한 챔버가 없습니다."}
 
         # ---- 재탐색 시작 지점 ----
         ids = [c["stage"] for c in chambers]
         if from_stage in ids:
             k = ids.index(from_stage)
         elif from_stage:
-            # 독립 챔버가 없는 공정(이온 주입) → 연동된 마지막 챔버 공정 기준
             order = {st["id"]: st["order"] for st in self.stages}
             cand = [i for i, c in enumerate(chambers)
                     if order[c["stage"]] <= order.get(from_stage, 0)]
@@ -256,32 +360,27 @@ class Pipeline:
             k = 0
 
         # ---- 앞 공정 고정 구간 ----
-        cur_lanes = None
-        if lanes and len(lanes) == n:
-            try:
-                cur_lanes = [str(x).split("-") for x in lanes]
-                if any(len(p) != len(chambers) for p in cur_lanes):
-                    cur_lanes = None
-            except Exception:  # noqa: BLE001
-                cur_lanes = None
+        prefix = None
+        if k > 0 and lanes:
+            cand = []
+            for path in lanes:
+                p = str(path).split("-")
+                if len(p) == len(chambers) and all(p[i] in avail[i] for i in range(k)):
+                    cand.append(p[:k])
+            # 고정 구간끼리도 겹치면 안 된다
+            ok = all(len(set(col)) == len(col) for col in zip(*cand)) if cand else False
+            if ok and len(cand) >= n:
+                prefix = cand[:n]
+        if prefix is None:
+            k = 0                       # 물려받을 조합이 없으면 처음부터 탐색
 
+        # ---- 필요한 경로의 수율을 배치로 계산 ----
         if k == 0:
-            # 첫 공정은 라인 식별자로 고정 (라인 l = 산화 챔버 l)
-            prefix = [[opts[0][l]] for l in range(n)]
-            k = 1
-        elif cur_lanes:
-            prefix = [cur_lanes[l][:k] for l in range(n)]
+            need = list(itertools.product(*avail))
         else:
-            prefix = [[opts[i][l] for i in range(k)] for l in range(n)]
-
-        tail_opts = opts[k:]
-
-        # ---- 필요한 전체 경로만 배치 예측 ----
-        need = set()
-        for l in range(n):
-            for tail in itertools.product(*tail_opts):
-                need.add(tuple(prefix[l]) + tail)
-        need = sorted(need)
+            need = sorted({tuple(pf) + tail
+                           for pf in prefix
+                           for tail in itertools.product(*avail[k:])})
 
         rows = []
         for path in need:
@@ -294,17 +393,30 @@ class Pipeline:
         ymap = {p: float(df.loc[i, "yield_rate"]) for i, p in enumerate(need)}
         tmap = {p: float(df.loc[i, "Target"]) for i, p in enumerate(need)}
 
-        # ---- 재탐색 구간의 순열 조합 전수 탐색 ----
-        perm_space = [list(itertools.permutations(o)) for o in tail_opts]
+        # ---- 겹치지 않는 배정 전수 탐색 ----
+        #   첫 공정은 조합(라인 라벨 중복 제거), 이후 공정은 순열(단사 배정)
+        if k == 0:
+            head_space = list(itertools.combinations(avail[0], n))
+            tail_space = [list(itertools.permutations(a, n)) for a in avail[1:]]
+        else:
+            head_space = [tuple(range(n))]        # 프리픽스 고정
+            tail_space = [list(itertools.permutations(a, n)) for a in avail[k:]]
+
         results = []
-        for perms in itertools.product(*perm_space):
-            lane_paths, total = [], 0.0
-            for l in range(n):
-                path = tuple(prefix[l]) + tuple(p[l] for p in perms)
-                total += ymap[path]
-                lane_paths.append(path)
-            results.append((total / n, lane_paths))
+        for head in head_space:
+            for tails in itertools.product(*tail_space):
+                lane_paths, total = [], 0.0
+                for l in range(n):
+                    if k == 0:
+                        path = (head[l],) + tuple(t[l] for t in tails)
+                    else:
+                        path = tuple(prefix[l]) + tuple(t[l] for t in tails)
+                    total += ymap[path]
+                    lane_paths.append(path)
+                results.append((total / n, lane_paths))
+
         results.sort(key=lambda x: x[0], reverse=True)
+        lock = k if k > 0 else 1        # 첫 공정은 라인 식별자이므로 고정으로 표기
 
         def pack(avg, lane_paths, rank):
             return {
@@ -312,14 +424,14 @@ class Pipeline:
                 "avg_yield": round(avg, 3),
                 "min_yield": round(min(ymap[p] for p in lane_paths), 3),
                 "lanes": [{
-                    "lane": lane_paths[i][0],
-                    "path": "-".join(lane_paths[i]),
-                    "fixed": list(lane_paths[i][:k]),
-                    "searched": list(lane_paths[i][k:]),
-                    "chambers": {c["key"]: v for c, v in zip(chambers, lane_paths[i])},
-                    "yield": round(ymap[lane_paths[i]], 3),
-                    "target": round(tmap[lane_paths[i]], 2),
-                } for i in range(n)],
+                    "lane": lp[0],
+                    "path": "-".join(lp),
+                    "fixed": list(lp[:lock]),
+                    "searched": list(lp[lock:]),
+                    "chambers": {c["key"]: v for c, v in zip(chambers, lp)},
+                    "yield": round(ymap[lp], 3),
+                    "target": round(tmap[lp], 2),
+                } for lp in lane_paths],
             }
 
         top = [pack(a, lp, i + 1) for i, (a, lp) in enumerate(results[:top_n])]
@@ -327,19 +439,157 @@ class Pipeline:
 
         return {
             "ok": True,
-            "stages": [{"stage": c["stage"], "name": c["name"],
-                        "key": c["key"], "options": c["options"]} for c in chambers],
+            "mode": "search",
+            "source": "모델 예측 기반 탐색",
+            "note": "",
+            "stages": [{"stage": c["stage"], "name": c["name"], "key": c["key"],
+                        "options": c["options"], "available": avail[i]}
+                       for i, c in enumerate(chambers)],
             "mirrors": [{"key": d, "source": s} for d, s in self._mirror.items()],
-            "locked_upto": k,
-            "locked_stages": [c["name"] for c in chambers[:k]],
-            "search_stages": [c["name"] for c in chambers[k:]],
+            "lane_count": n,
+            "bottleneck": [chambers[i]["name"] for i, a in enumerate(avail) if len(a) == n],
+            "locked_upto": lock,
+            "locked_stages": [c["name"] for c in chambers[:lock]],
+            "search_stages": [c["name"] for c in chambers[lock:]],
             "paths_evaluated": len(need),
             "sets_evaluated": len(results),
             "current": {"path": "-".join(cur_path),
-                        "yield": round(ymap.get(cur_path, float("nan")), 3)
-                        if cur_path in ymap else None},
+                        "yield": round(ymap[cur_path], 3) if cur_path in ymap else None},
             "best": top[0] if top else None,
             "top": top,
+        }
+
+
+    # ------------------------------------------------- 평균 수율 최대 / 최저
+    def lane_chambers(self, params: Dict[str, Any],
+                      available: Optional[Dict[str, List[str]]] = None
+                      ) -> List[Dict[str, Any]]:
+        """최적화의 기준이 되는 라인별 챔버 배정을 가져온다."""
+        rs = self.fixed_route_set(params, available)
+        if rs is None:
+            rs = self.recommend_set(params, None, None, available, 1, mode="search")
+        if not rs.get("ok"):
+            return [{}]
+        return [l["chambers"] for l in rs["best"]["lanes"]]
+
+    def optimize(self, params: Dict[str, Any], direction: str = "max",
+                 max_rounds: int = 15, samples: int = 9,
+                 available: Optional[Dict[str, List[str]]] = None,
+                 tol: float = 1e-3) -> Dict[str, Any]:
+        """
+        라인 전체의 **평균 수율**을 최대(최저)로 만드는 파라미터를 찾는다.
+
+        - 목적함수 : 경로 조합의 각 라인을 모델로 평가한 수율의 평균
+        - 챔버     : 경로 조합이 정하므로 탐색 대상에서 제외
+        - 종료     : 개선폭이 tol 미만이면 수렴으로 보고 중단
+                     (같은 버튼을 다시 눌러도 결과가 바뀌지 않는다)
+        """
+        better = (lambda a, b: a > b + tol) if direction == "max" \
+            else (lambda a, b: a < b - tol)
+        pick = max if direction == "max" else min
+
+        lanes = self.lane_chambers(params, available)
+        n_lane = len(lanes)
+
+        tunable = []
+        for st in self.stages:
+            for p in st["params"]:
+                if p.get("mirror") or "hamber" in p["key"]:
+                    continue
+                tunable.append(p)
+
+        def candidates(p):
+            if p["type"] == "category":
+                return [str(v) for v in p["options"]]
+            lo, hi = float(p["min"]), float(p["max"])
+            if hi <= lo:
+                return [lo]
+            step = (hi - lo) / (samples - 1)
+            vals = [lo + i * step for i in range(samples)]
+            if p.get("dtype") == "int":
+                return sorted({int(round(v)) for v in vals})
+            return sorted({round(v, 6) for v in vals})
+
+        def score(points: List[Dict[str, Any]]) -> List[float]:
+            """각 파라미터 조합을 라인별로 평가한 뒤 평균을 낸다."""
+            rows = []
+            for pt in points:
+                for lane in lanes:
+                    r = dict(pt)
+                    r.update(lane)
+                    rows.append(r)
+            y = self.run_frame(rows)["yield_rate"].tolist()
+            return [sum(y[i * n_lane:(i + 1) * n_lane]) / n_lane
+                    for i in range(len(points))]
+
+        cur = self.merge(params)
+        start_y = score([cur])[0]
+        cur_y = start_y
+        trace = [round(cur_y, 3)]
+        rounds_used = 0
+
+        for _ in range(max_rounds):
+            rounds_used += 1
+            points, meta = [], []
+            for p in tunable:
+                for v in candidates(p):
+                    r = dict(cur)
+                    r[p["key"]] = v
+                    points.append(r)
+                    meta.append((p["key"], v))
+
+            y = score(points)
+
+            gains = {}
+            for key in {k for k, _ in meta}:
+                idxs = [i for i, (k, _) in enumerate(meta) if k == key]
+                bi = pick(idxs, key=lambda i: y[i])
+                if better(y[bi], cur_y):
+                    gains[key] = (meta[bi][1], y[bi])
+
+            if not gains:
+                break                                  # 수렴
+
+            combined = dict(cur)
+            for key, (v, _) in gains.items():
+                combined[key] = v
+            comb_y = score([combined])[0]
+
+            if better(comb_y, cur_y):
+                cur, cur_y = combined, comb_y
+            else:
+                key = pick(gains, key=lambda k: gains[k][1])
+                cur = dict(cur)
+                cur[key] = gains[key][0]
+                cur_y = gains[key][1]
+
+            trace.append(round(cur_y, 3))
+
+        # 라인별 최종 수율
+        rows = []
+        for lane in lanes:
+            r = dict(cur)
+            r.update(lane)
+            rows.append(r)
+        df = self.run_frame(rows).reset_index(drop=True)
+        lane_out = [{"chambers": lanes[i],
+                     "path": "-".join(str(v) for v in lanes[i].values()),
+                     "yield": round(float(df.loc[i, "yield_rate"]), 3)}
+                    for i in range(n_lane)]
+
+        return {
+            "direction": direction,
+            "objective": "lane_avg_yield",
+            "params": dict(cur),
+            "lanes": lane_out,
+            "start_yield": round(start_y, 3),
+            "final_yield": round(cur_y, 3),
+            "delta": round(cur_y - start_y, 3),
+            "converged": rounds_used < max_rounds,
+            "rounds": rounds_used,
+            "trace": trace,
+            "tuned": [p["key"] for p in tunable],
+            "prediction": self.run(cur),
         }
 
 

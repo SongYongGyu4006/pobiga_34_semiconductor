@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=41">
+<link rel="stylesheet" href="/static/style.css?v=57">
 </head>
 <body>
 
@@ -18,6 +18,9 @@
     <span class="brand-sub">PROCESS YIELD SIM</span>
   </div>
   <div class="topbar-right">
+    <a class="btn btn-mon" href="/monitor" target="_blank" rel="noopener">생산 모니터링</a>
+    <button id="opt-max" class="btn">최대 수율</button>
+    <button id="opt-min" class="btn">최저 수율</button>
     <button id="reset-btn" class="btn">기본값으로</button>
   </div>
 </header>
@@ -38,6 +41,9 @@
         <span id="yield-base">기본값 —</span>
         <span id="yield-delta" class="delta">—</span>
       </div>
+      <p class="preview-lane" id="preview-lane">—</p>
+      <p class="opt-msg hidden" id="opt-msg">—</p>
+
       <div class="yield-stats">
         <div class="stat">
           <span class="stat-label">웨이퍼당 예상 결함 Die</span>
@@ -54,7 +60,7 @@
 
     <div class="panel panel-route">
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-      <span class="kicker">챔버 최적 경로 조합</span>
+      <span class="kicker">챔버 최적 경로 조합 <b class="route-mode" id="route-mode">—</b></span>
       <p class="route-scope" id="route-scope">—</p>
 
       <div class="route-map" id="route-map"></div>
@@ -68,7 +74,7 @@
           <span class="route-yield" id="set-min">—</span>
         </div>
         <div class="route-line">
-          <span class="route-tag">현재</span>
+          <span class="route-tag" id="route-cur-tag">현재</span>
           <span class="route-path" id="route-cur">—</span>
           <span class="route-yield" id="route-cur-y">—</span>
         </div>
@@ -88,6 +94,6 @@
 
 <div id="loading" class="loading hidden">계산 중</div>
 
-<script src="/static/app.js?v=41"></script>
+<script src="/static/app.js?v=57"></script>
 </body>
 </html>

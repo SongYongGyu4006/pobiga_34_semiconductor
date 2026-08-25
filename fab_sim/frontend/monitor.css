@@ -1,0 +1,382 @@
+/* 생산 운영 모니터링 — 기존 토큰(style.css) 위에 얹는 레이아웃 */
+
+.mon-layout{
+  display:grid;grid-template-columns:minmax(0,1fr) 340px;
+  gap:20px;padding:20px 26px 64px;align-items:start;max-width:1560px;
+}
+@media (max-width:1080px){ .mon-layout{grid-template-columns:1fr} }
+
+.line{display:flex;flex-direction:column;gap:14px;min-width:0}
+.mon-side{position:sticky;top:78px;display:flex;flex-direction:column;gap:14px}
+
+.lot-pick{
+  display:flex;align-items:center;gap:6px;color:#fff;
+  font-family:var(--font-h);font-size:11px;font-weight:600;letter-spacing:.12em;
+}
+.lot-pick select{
+  font-family:var(--font-h);font-size:13px;font-weight:600;
+  background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);
+  border-radius:4px;padding:4px 8px;cursor:pointer;
+}
+.lot-pick select option{color:var(--text)}
+.topbar a.btn{text-decoration:none;display:inline-block}
+
+.tick-badge{
+  font-family:var(--font-h);font-size:10px;font-weight:700;letter-spacing:.06em;
+  color:var(--a-800);background:var(--a-100);padding:2px 6px;border-radius:2px;
+  margin-left:6px;vertical-align:1px;
+}
+
+/* ── 공정 라인 ─────────────────────────────────────────── */
+.panel-line{padding-bottom:8px}
+.lstage{margin-top:14px;padding-top:12px;border-top:1px solid var(--n-200)}
+.lstage:first-of-type{border-top:none;padding-top:6px}
+
+.lstage-head{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.lstage-idx{
+  width:20px;height:20px;flex:none;background:var(--a-900);color:#fff;
+  font-family:var(--font-h);font-size:11px;font-weight:600;display:grid;place-items:center;
+}
+.lstage-name{font-size:14.5px;font-weight:700}
+.lstage-meta{
+  margin-left:auto;font-family:var(--font-h);font-size:11.5px;color:var(--n-600);
+}
+
+.chrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.chcell{
+  border:1px solid var(--divider);padding:9px 11px 8px;background:#fff;
+  transition:.15s;
+}
+.chcell.run{border-color:var(--a-500);background:var(--a-100);cursor:pointer}
+.chcell.run:hover{border-color:var(--a-800)}
+.chcell-top{display:flex;justify-content:space-between;align-items:baseline}
+.chno{font-family:var(--font-h);font-size:11.5px;font-weight:700;color:var(--n-700)}
+.chst{
+  font-family:var(--font-h);font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  color:var(--n-500);
+}
+.chcell.run .chst{color:var(--a-800)}
+.chwafer{
+  font-family:var(--font-h);font-size:19px;font-weight:700;color:var(--n-900);
+  font-variant-numeric:tabular-nums;margin:3px 0 6px;line-height:1;
+}
+.chcell:not(.run) .chwafer{color:var(--n-300)}
+.chbar{height:4px;background:var(--n-200);overflow:hidden}
+.chfill{height:100%;background:var(--a-600);transition:width .3s}
+.chpct{
+  margin-top:3px;font-family:var(--font-h);font-size:10.5px;font-weight:600;
+  color:var(--a-800);text-align:right;font-variant-numeric:tabular-nums;height:13px;
+}
+
+.queue{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.qchip{
+  font-family:var(--font-h);font-size:11px;font-weight:600;
+  border:1px dashed var(--n-300);color:var(--n-600);
+  padding:2px 7px;border-radius:2px;cursor:pointer;
+}
+.qchip:hover{border-color:var(--a-500);color:var(--a-800)}
+
+/* ── History ──────────────────────────────────────────── */
+.hist{list-style:none;margin-top:8px;max-height:320px;overflow-y:auto}
+.hist li{
+  display:grid;grid-template-columns:52px minmax(0,1fr) auto;
+  align-items:baseline;gap:10px;padding:8px 4px;
+  border-bottom:1px solid var(--n-200);cursor:pointer;
+}
+.hist li:hover{background:var(--a-100)}
+.hist li:last-child{border-bottom:none}
+.h-w{font-family:var(--font-h);font-size:13px;font-weight:700;color:var(--n-900)}
+.h-path{font-family:var(--font-h);font-size:12.5px;color:var(--n-700);letter-spacing:.04em}
+.h-y{
+  font-family:var(--font-h);font-size:13px;font-weight:700;color:var(--a-800);
+  font-variant-numeric:tabular-nums;justify-self:end;
+}
+
+/* ── LOT 현황 ─────────────────────────────────────────── */
+.lot-name{
+  font-family:var(--font-h);font-size:30px;font-weight:700;letter-spacing:-.02em;
+  color:var(--a-800);margin-top:8px;
+}
+.prog-bar{height:8px;background:var(--n-200);margin:14px 0 7px;position:relative}
+.prog-fill{height:100%;width:0;background:var(--a-600);transition:width .3s}
+.prog-foot{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--font-h);font-size:13px;font-weight:600;color:var(--n-700);
+}
+
+.mon-stats{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin-top:14px;padding-top:14px;border-top:1px solid var(--n-200);
+}
+.mstat{border:1px solid var(--n-200);padding:9px 10px}
+.mstat-k{
+  display:block;font-family:var(--font-h);font-size:10px;font-weight:700;
+  letter-spacing:.08em;color:var(--n-600);
+}
+.mstat-v{
+  display:block;margin-top:4px;font-family:var(--font-h);font-size:21px;font-weight:700;
+  color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1;
+}
+
+/* ── Wafer 상세 ───────────────────────────────────────── */
+.hint{font-size:12px;color:var(--n-500);line-height:1.5;margin-top:8px}
+.hint.hidden{display:none}
+
+.d-head{display:flex;align-items:baseline;gap:8px;margin-top:10px;flex-wrap:wrap}
+.d-head b{font-family:var(--font-h);font-size:20px;font-weight:700}
+.d-sub{font-family:var(--font-h);font-size:11px;color:var(--n-500)}
+.d-tag{
+  margin-left:auto;font-family:var(--font-h);font-size:11px;font-weight:600;
+  color:var(--a-800);background:var(--a-100);padding:2px 7px;border-radius:2px;
+}
+.d-yield{
+  margin-top:10px;padding:9px 11px;border:1px solid var(--n-200);
+  font-size:12.5px;color:var(--n-700);
+}
+.d-yield b{
+  font-family:var(--font-h);font-size:20px;font-weight:700;color:var(--a-800);
+  margin:0 6px;font-variant-numeric:tabular-nums;
+}
+.d-title{
+  margin-top:14px;font-family:var(--font-h);font-size:10.5px;font-weight:700;
+  letter-spacing:.08em;color:var(--n-600);
+}
+.d-path,.d-cand{list-style:none;margin-top:6px}
+.d-path li{
+  display:grid;grid-template-columns:48px 34px minmax(0,1fr);gap:7px;
+  align-items:baseline;padding:6px 0;border-bottom:1px solid var(--n-200);
+}
+.d-path li:last-child{border-bottom:none}
+.p-stage{font-size:11.5px;font-weight:600;color:var(--n-700)}
+.p-ch{font-family:var(--font-h);font-size:11.5px;font-weight:700;color:var(--a-800)}
+.p-out{font-family:var(--font-h);font-size:11px;color:var(--n-600);line-height:1.4}
+
+.d-cand li{
+  display:grid;grid-template-columns:48px minmax(0,1fr);gap:7px;
+  align-items:center;padding:6px 0;border-bottom:1px solid var(--n-200);
+}
+.d-cand li:last-child{border-bottom:none}
+.c-stage{font-size:11.5px;font-weight:600;color:var(--n-700)}
+.c-scores{display:flex;gap:5px;flex-wrap:wrap}
+.c-scores em{
+  font-style:normal;font-family:var(--font-h);font-size:10.5px;font-weight:600;
+  color:var(--n-600);border:1px solid var(--divider);padding:1px 5px;border-radius:2px;
+  font-variant-numeric:tabular-nums;
+}
+.c-scores em.sel{
+  background:var(--a-800);border-color:var(--a-800);color:#fff;
+}
+
+/* ── Wafer 색 구분 ─────────────────────────────────────── */
+.chcell{border-left:3px solid transparent}
+.chcell.run{border-left-color:var(--a-600)}
+/* 진행률 바는 항상 같은 민트로 칠한다.
+   Wafer 색을 쓰면 어두운 색이 빈 트랙(회색)과 헷갈린다.
+   Wafer 구분은 왼쪽 색 띠와 경로 트레이스가 담당한다. */
+.chcell.run .chfill{background:var(--a-600)}
+.chcell.sel{box-shadow:0 0 0 2px var(--wc) inset}
+
+
+/* ── 공정 윈도우 이탈 ──────────────────────────────────── */
+.oow-dot{
+  display:inline-grid;place-items:center;width:14px;height:14px;margin-left:5px;
+  border-radius:50%;background:var(--neg);color:#fff;
+  font-family:var(--font-h);font-size:9.5px;font-weight:700;font-style:normal;
+  vertical-align:3px;
+}
+.chcell.oow{border-color:var(--neg)}
+.chcell.oow .chwafer{color:var(--neg)}
+.qchip.oow{border-color:var(--neg);color:var(--neg)}
+.d-title.warn{color:var(--neg)}
+.d-title.ok{color:var(--a-800)}
+.d-oow{list-style:none;margin-top:6px}
+.d-oow li{
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;
+  align-items:baseline;padding:5px 8px;margin-bottom:4px;
+  border-left:3px solid var(--neg);background:#fdf3f2;
+}
+.d-oow span{font-size:11.5px;font-weight:600;color:var(--n-800)}
+.d-oow b{font-family:var(--font-h);font-size:12px;color:var(--neg);font-variant-numeric:tabular-nums}
+.d-oow em{font-style:normal;font-family:var(--font-h);font-size:10.5px;color:var(--n-600)}
+
+/* ── 연동 공정 배지 ────────────────────────────────────── */
+.link-badge{
+  font-family:var(--font-h);font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  color:var(--n-600);background:var(--n-200);padding:2px 6px;border-radius:2px;
+}
+
+/* ── 경로 트레이스 ─────────────────────────────────────── */
+#trace{margin-top:10px}
+#trace svg{display:block;overflow:visible}
+.tr-head{font-family:var(--font-h);font-size:9.5px;font-weight:600;fill:var(--n-600)}
+.tr-node{fill:#fff;stroke:var(--n-300);stroke-width:1.1}
+.tr-num{font-family:var(--font-h);font-size:10px;font-weight:700;fill:var(--n-600);pointer-events:none}
+.tr-num.on{fill:#fff}
+.tr-line{fill:none;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}
+.tr-live{stroke-width:2.2;stroke-dasharray:4 3;opacity:.8}
+.tr-live-node{fill:#fff;stroke-width:2.4;stroke-dasharray:3 2}
+.tr-ghost{fill:none;stroke-width:1.4;opacity:.22}
+.tr-on{stroke:#fff;stroke-width:1}
+
+/* ── History ───────────────────────────────────────────── */
+.hist li{grid-template-columns:8px 60px minmax(0,1fr) auto}
+.hist li.h-ctrl{
+  grid-template-columns:1fr;padding:6px 4px 8px;cursor:default;
+  font-size:11.5px;color:var(--n-600);
+}
+.hist li.h-ctrl:hover{background:transparent}
+.hist li.h-ctrl label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.hist li.sel{background:var(--a-100)}
+.h-dot{width:8px;height:8px;border-radius:50%}
+
+.c-scores em.linked{background:var(--n-200);border-color:var(--n-300);color:var(--n-700)}
+
+/* 챔버 사용 중지 */
+.chpow{
+  margin-left:6px;width:18px;height:16px;flex:none;padding:0;cursor:pointer;
+  border:1px solid var(--divider);border-radius:2px;background:transparent;
+  color:var(--n-500);font-size:8.5px;line-height:1;display:grid;place-items:center;
+}
+.chpow:hover{border-color:var(--a-500);color:var(--a-800)}
+.chpow.lock{cursor:default;border-style:dashed;font-size:8px}
+.chcell-top{gap:0}
+.chcell-top .chst{margin-left:auto}
+
+.chcell.off{background:repeating-linear-gradient(135deg,#f6f6f7 0 6px,#eeeef0 6px 12px);
+            border-color:var(--n-300);border-left-color:var(--n-400,#b8b8bb)}
+.chcell.off .chno,.chcell.off .chwafer{color:var(--n-500)}
+.chcell.off .chst{color:var(--n-600);font-weight:700}
+.chcell.off .chpow{border-color:var(--a-600);color:var(--a-800)}
+
+.chcell.off.run{background:#fff}
+.chcell.off.run .chst{color:var(--neg)}
+.chcell.off.run{border-color:var(--n-400,#b8b8bb);border-style:dashed}
+
+/* 추천 vs 실제 기록 경로 비교 */
+.gain-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--n-200)}
+.gain-box.hidden{display:none}
+.gain-row{
+  display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;
+  font-family:var(--font-h);font-size:12px;color:var(--n-700);
+}
+.gain-row b{font-size:14px;font-weight:700;color:var(--a-800);font-variant-numeric:tabular-nums}
+.gain-row b.base{color:var(--n-700)}
+.gain-main{
+  margin-top:8px;padding-top:8px;border-top:1px dashed var(--n-300);
+  font-family:var(--font-h);font-size:22px;font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--n-700);
+  display:flex;align-items:baseline;justify-content:space-between;
+}
+.gain-main.up{color:var(--a-800)}
+.gain-main.down{color:var(--neg)}
+.gain-main em{font-style:normal;font-size:11px;font-weight:600;color:var(--n-600)}
+
+/* History 2줄 구성 */
+.hist li{grid-template-columns:8px 60px minmax(0,1fr) auto;align-items:center}
+.h-paths,.h-ys{display:flex;flex-direction:column;line-height:1.3}
+.h-paths b{font-family:var(--font-h);font-size:12.5px;font-weight:700;color:var(--n-800);letter-spacing:.04em}
+.h-paths em{font-style:normal;font-family:var(--font-h);font-size:10.5px;color:var(--n-500);letter-spacing:.03em}
+.h-ys{align-items:flex-end}
+.h-ys b{font-family:var(--font-h);font-size:13px;font-weight:700;color:var(--a-800);font-variant-numeric:tabular-nums}
+.h-ys em{font-style:normal;font-family:var(--font-h);font-size:10.5px;font-weight:600;color:var(--n-500);font-variant-numeric:tabular-nums}
+.h-ys em.up{color:var(--a-800)}
+.h-ys em.down{color:var(--neg)}
+.h-legend{display:block;margin-top:4px;font-size:10.5px;color:var(--n-500)}
+
+/* 상세 비교표 */
+.d-cmp{width:100%;border-collapse:collapse;margin-top:6px}
+.d-cmp td{padding:5px 4px;border-bottom:1px solid var(--n-200);font-size:11.5px;color:var(--n-700)}
+.d-cmp td.p{font-family:var(--font-h);font-weight:700;color:var(--n-800);letter-spacing:.05em}
+.d-cmp td.y{
+  text-align:right;font-family:var(--font-h);font-size:13px;font-weight:700;
+  color:var(--a-800);font-variant-numeric:tabular-nums;
+}
+.d-cmp td.y.base{color:var(--n-700)}
+.d-cmp tr.g td{border-bottom:none;font-weight:700}
+.d-cmp td.y.up{color:var(--a-800)}
+.d-cmp td.y.down{color:var(--neg)}
+.d-note{margin-top:6px;font-size:10.5px;color:var(--n-500);line-height:1.5}
+
+/* 예상 경로 */
+.tr-fc{stroke-width:1.8;stroke-dasharray:2.5 3.5;opacity:.55}
+.tr-fc-node{fill:#fff;stroke-width:1.8;stroke-dasharray:2.5 2.5;opacity:.8}
+.tr-num.fc{opacity:.7}
+
+.d-title.fc{color:var(--n-700)}
+.d-fc{list-style:none;margin-top:6px}
+.d-fc li{
+  display:grid;grid-template-columns:48px 34px minmax(0,1fr);gap:7px;
+  align-items:center;padding:5px 0;border-bottom:1px dashed var(--n-200);
+}
+.d-fc li:last-child{border-bottom:none}
+.f-stage{font-size:11.5px;font-weight:600;color:var(--n-600)}
+.f-ch{
+  font-family:var(--font-h);font-size:11.5px;font-weight:700;color:var(--a-700);
+  border:1px dashed var(--a-500);border-radius:2px;text-align:center;padding:1px 0;
+}
+.f-sc{display:flex;gap:4px;flex-wrap:wrap}
+.f-sc em{
+  font-style:normal;font-family:var(--font-h);font-size:10px;font-weight:600;
+  color:var(--n-500);border:1px solid var(--divider);padding:1px 4px;border-radius:2px;
+  font-variant-numeric:tabular-nums;
+}
+.f-sc em.sel{background:var(--a-100);border-color:var(--a-500);color:var(--a-800)}
+.f-sc em.linked{background:var(--n-200);border-color:var(--n-300);color:var(--n-700)}
+
+.d-fcsum{
+  margin-top:8px;padding:8px 10px;border:1px dashed var(--a-500);background:var(--a-100);
+  font-size:12px;color:var(--n-700);
+}
+.d-fcsum b{
+  font-family:var(--font-h);font-size:17px;font-weight:700;color:var(--a-800);
+  margin:0 6px;font-variant-numeric:tabular-nums;
+}
+
+/* 정밀 예측 */
+.fc-btn{
+  width:100%;margin-top:8px;padding:7px 0;cursor:pointer;
+  font-family:var(--font-h);font-size:12px;font-weight:600;
+  color:var(--a-800);background:#fff;border:1px dashed var(--a-500);border-radius:3px;
+}
+.fc-btn:hover:not(:disabled){background:var(--a-100)}
+.fc-btn:disabled{color:var(--n-500);border-color:var(--divider);cursor:default}
+.fc-cmp{margin-top:8px}
+.d-note.warn{color:var(--neg)}
+
+/* 동승 그룹 */
+.co-title{display:block;margin-top:8px;font-size:10.5px;color:var(--n-600)}
+.d-co{list-style:none;margin-top:4px}
+.d-co li{
+  display:grid;grid-template-columns:8px 40px minmax(0,1fr);gap:7px;align-items:center;
+  padding:3px 4px;font-family:var(--font-h);font-size:11.5px;color:var(--n-600);
+}
+.d-co li.me{background:var(--a-100);color:var(--n-900);font-weight:700}
+.co-dot{width:8px;height:8px;border-radius:50%}
+.co-p{letter-spacing:.05em}
+
+.hist li.hint{grid-template-columns:1fr;cursor:default;color:var(--n-500);padding:10px 4px}
+.hist li.hint:hover{background:transparent}
+
+/* 정밀 예측 로딩 */
+.fc-load{display:flex;gap:5px;justify-content:center;padding:12px 0}
+.fc-load i{
+  width:6px;height:6px;border-radius:50%;background:var(--a-500);
+  animation:fcb .9s infinite ease-in-out;
+}
+.fc-load i:nth-child(2){animation-delay:.15s}
+.fc-load i:nth-child(3){animation-delay:.3s}
+@keyframes fcb{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+.prog-hint{margin-top:5px;font-size:10.5px;color:var(--n-500)}
+
+/* 챔버 진행률 바 대비 강화 */
+.chbar{height:5px;background:var(--n-200);border-radius:2px}
+.chfill{border-radius:2px}
+.chcell.run{border-left-width:4px}
+
+/* 라인에서는 Wafer 색 태그를 쓰지 않는다 (선택 강조만) */
+.chcell.run{border-left-width:3px;border-left-color:var(--a-600)}
+.chcell.sel{box-shadow:0 0 0 2px var(--a-800) inset}
+.qchip.sel{border-color:var(--a-800);color:var(--a-800);border-style:solid;font-weight:700}
+.hist li{grid-template-columns:60px minmax(0,1fr) auto}
+.h-dot{display:none}
