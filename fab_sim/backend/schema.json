@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "반도체 공정 수율 시뮬레이터",
-    "generated_from": "/mnt/user-data/uploads/merged_all_processes_derived.csv"
+    "generated_from": "../data/merged_all_processes_derived.csv"
   },
   "constants": {
     "Wafer_ID": "NOLSM32513132",
@@ -102,15 +102,9 @@
           "data_min": 861.79,
           "data_max": 1348.62,
           "step": 5,
-          "window": {
-            "min": 1266.666,
-            "max": 1348.62,
-            "n_in_window": 3075,
-            "coverage": 20.0
-          },
-          "min": 1266.666,
+          "min": 861.79,
           "max": 1348.62,
-          "default": 1279.31
+          "default": 1074.91
         },
         {
           "key": "Ox_ppm",
@@ -121,15 +115,9 @@
           "data_min": 20.75,
           "data_max": 50.09,
           "step": 0.1,
-          "window": {
-            "min": 20.75,
-            "max": 45.37,
-            "n_in_window": 14993,
-            "coverage": 97.5
-          },
           "min": 20.75,
-          "max": 45.37,
-          "default": 33.36
+          "max": 50.09,
+          "default": 33.64
         },
         {
           "key": "Ox_Pressure",
@@ -219,9 +207,15 @@
           "data_min": 190.934,
           "data_max": 209.755,
           "step": 0.05,
-          "min": 190.934,
-          "max": 209.755,
-          "default": 200.553
+          "window": {
+            "min": 199.252,
+            "max": 204.353,
+            "n_in_window": 8457,
+            "coverage": 55.0
+          },
+          "min": 199.252,
+          "max": 204.353,
+          "default": 201.657
         },
         {
           "key": "time_HMDS_bake",
@@ -311,14 +305,14 @@
           "data_max": 5194.329,
           "step": 1,
           "window": {
-            "min": 4947.144,
-            "max": 5107.455,
-            "n_in_window": 11144,
-            "coverage": 72.5
+            "min": 4976.007,
+            "max": 5101.35,
+            "n_in_window": 9223,
+            "coverage": 60.0
           },
-          "min": 4947.144,
-          "max": 5107.455,
-          "default": 5026.797
+          "min": 4976.007,
+          "max": 5101.35,
+          "default": 5033.57
         },
         {
           "key": "PR_amount",
@@ -342,9 +336,15 @@
           "data_min": 86.23,
           "data_max": 96.774,
           "step": 0.05,
-          "min": 86.23,
-          "max": 96.774,
-          "default": 92.05
+          "window": {
+            "min": 91.225,
+            "max": 93.561,
+            "n_in_window": 9229,
+            "coverage": 60.0
+          },
+          "min": 91.225,
+          "max": 93.561,
+          "default": 92.325
         },
         {
           "key": "time_softbake",
@@ -636,9 +636,15 @@
           "data_min": 29604.103,
           "data_max": 33675.751,
           "step": 50,
-          "min": 29604.103,
-          "max": 33675.751,
-          "default": 32200.397
+          "window": {
+            "min": 31982.453,
+            "max": 32302.259,
+            "n_in_window": 5381,
+            "coverage": 35.0
+          },
+          "min": 31982.453,
+          "max": 32302.259,
+          "default": 32222.259
         },
         {
           "key": "Ion_Temp",
@@ -663,14 +669,14 @@
           "data_max": 944.0,
           "step": 0.5,
           "window": {
-            "min": 865.0,
-            "max": 917.0,
-            "n_in_window": 11804,
-            "coverage": 76.8
+            "min": 898.0,
+            "max": 924.0,
+            "n_in_window": 8912,
+            "coverage": 58.0
           },
-          "min": 865.0,
-          "max": 917.0,
-          "default": 902.0
+          "min": 898.0,
+          "max": 924.0,
+          "default": 910.0
         },
         {
           "key": "RTA_Temp",

@@ -121,11 +121,58 @@ MIRROR = {"Ion_Chamber": "Etching_Chamber"}
 #   기본값(중앙값)이 창을 벗어나면 가까운 경계로 당긴다.
 # ---------------------------------------------------------------------------
 PROCESS_WINDOW = {
-    "Ox_Temp":      {"min": 1266.666, "max": 1348.620},
-    "Ox_ppm":       {"min": 20.750,   "max": 45.370},
-    "spin3_rpm":    {"min": 4947.144, "max": 5107.455},
-    "Furnace_Temp": {"min": 865,      "max": 917},
+    # S5b 윈도우 (2026-08 갱신). 이 목록에 없는 파라미터는 데이터 min/max 를 그대로 쓴다.
+    "temp_softbake":  {"min": 91.225,     "max": 93.561},
+    "spin3_rpm":      {"min": 4976.007,   "max": 5101.350},
+    "temp_HMDS_bake": {"min": 199.252,    "max": 204.353},
+    "Furnace_Temp":   {"min": 898,        "max": 924},
+    "Ion_Energy":     {"min": 31982.453,  "max": 32302.259},
 }
+
+YIELD = {
+    "pkl": "final_target_model.pkl",
+    "target_key": "Target",
+    "target_name": "예상 결함 Die",
+    "total_dies": 533,          # 수율(%) = (1 - Target / total_dies) x 100
+}
+
+KOR = {
+    "Ox_Temp": "산화 온도", "Ox_ppm": "가스 농도", "Ox_Pressure": "챔버 압력",
+    "Ox_Time": "산화 시간", "Ox_Type": "산화 방식", "Ox_Chamber": "챔버",
+    "temp_HMDS_bake": "HMDS 베이크 온도", "time_HMDS_bake": "HMDS 베이크 시간",
+    "N2_HMDS": "N₂ 유량", "pressure_HMDS": "HMDS 압력", "temp_HMDS": "HMDS 온도",
+    "spin1_rpm": "스핀 1단", "spin2_rpm": "스핀 2단", "spin3_rpm": "스핀 3단",
+    "PR_amount": "PR 도포량", "temp_softbake": "소프트베이크 온도",
+    "time_softbake": "소프트베이크 시간", "photo_soft_Chamber": "챔버",
+    "Energy_Exposure": "노광량", "Resolution": "해상도", "UV_type": "광원",
+    "litho_Chamber": "챔버",
+    "Thin_F1": "박막 두께 F1", "Thin_F2": "박막 두께 F2", "Thin_F3": "박막 두께 F3",
+    "Temp_Etching": "식각 온도", "Source_Power": "Source Power", "Etching_Chamber": "챔버",
+    "Ion_Energy": "가속 에너지", "Ion_Temp": "주입 온도", "Furnace_Temp": "노 온도",
+    "RTA_Temp": "RTA 온도", "Ion_Chamber": "챔버",
+    "Current": "빔 전류", "Beam_Current": "빔 전류", "Ion_Current": "빔 전류",
+}
+
+UNIT = {
+    "Ox_Temp": "℃", "Ox_ppm": "ppm", "Ox_Pressure": "Torr", "Ox_Time": "min",
+    "temp_HMDS_bake": "℃", "time_HMDS_bake": "sec", "N2_HMDS": "sccm",
+    "pressure_HMDS": "Torr", "temp_HMDS": "℃",
+    "spin1_rpm": "rpm", "spin2_rpm": "rpm", "spin3_rpm": "rpm",
+    "temp_softbake": "℃", "time_softbake": "sec",
+    "Energy_Exposure": "mJ/cm²", "Resolution": "nm",
+    "Thin_F1": "Å", "Thin_F2": "Å", "Thin_F3": "Å",
+    "Temp_Etching": "℃", "Source_Power": "W",
+    "Ion_Energy": "eV", "Ion_Temp": "℃", "Furnace_Temp": "℃", "RTA_Temp": "℃",
+    "Current": "mA", "Beam_Current": "mA", "Ion_Current": "mA",
+}
+
+CATEGORICAL = {"Ox_Type", "UV_type", "Ox_Chamber", "photo_soft_Chamber",
+               "litho_Chamber", "Etching_Chamber", "Ion_Chamber"}
+
+# 원본 데이터에서 값이 100% 일치하는 컬럼 쌍.
+# 왼쪽 파라미터는 오른쪽 값을 그대로 따라가며, 사용자가 직접 조절할 수 없다.
+# 챔버 경로 탐색에서도 차원에서 제외된다.
+MIRROR = {"Ion_Chamber": "Etching_Chamber"}
 
 # ---------------------------------------------------------------------------
 # 데이터 분석으로 확정된 최적 경로 조합.

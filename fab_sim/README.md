@@ -238,19 +238,34 @@ POST /api/recommend
 권장 조업 구간을 **슬라이더 범위 자체**로 적용한다.
 `build_schema.py` 의 `PROCESS_WINDOW` 에서 정의한다.
 
-| 변수 | 하한 | 상한 |
-|---|---|---|
-| `Ox_Temp` | 1266.666 | 1348.620 |
-| `Ox_ppm` | 20.750 | 45.370 |
-| `spin3_rpm` | 4947.144 | 5107.455 |
-| `Furnace_Temp` | 865 | 917 |
+### S5b 윈도우 (현행)
+
+| 변수 | 하한 | 상한 | 단독 coverage |
+|---|---|---|---|
+| `temp_softbake` | 91.225 | 93.561 | 60.0% |
+| `spin3_rpm` | 4976.007 | 5101.350 | 60.0% |
+| `temp_HMDS_bake` | 199.252 | 204.353 | 55.0% |
+| `Furnace_Temp` | 898 | 924 | 58.0% |
+| `Ion_Energy` | 31982.453 | 32302.259 | 35.0% |
+
+이 목록에 없는 파라미터는 **데이터의 min / max 를 그대로** 슬라이더 범위로 쓴다.
+`build_schema.py` 의 `PROCESS_WINDOW` 하나만 고치면 아래가 모두 따라온다.
+
+| 연쇄 반영 | 내용 |
+|---|---|
+| 슬라이더 범위 | 창이 있으면 창, 없으면 데이터 min/max |
+| 기본값 | 창 안 실측 중앙값 (창이 없으면 전체 중앙값) |
+| 최대·최저 수율 탐색 | 슬라이더 범위 안에서만 탐색하므로 창을 벗어나지 않음 |
+| 모니터링 빨간 표시 | 창이 걸린 변수만, 해당 공정에 진입했을 때 |
+| `PW` 배지 | 창이 걸린 파라미터에 표시 |
 
 | 변수 | 기본값 | 창 안 데이터 비율 |
 |---|---|---|
-| `Ox_Temp` | 1279.310 | 20.0% |
-| `Ox_ppm` | 33.360 | 97.5% |
-| `spin3_rpm` | 5026.797 | 72.5% |
-| `Furnace_Temp` | 902.000 | 76.8% |
+| `temp_HMDS_bake` | 201.657 | 55.0% |
+| `spin3_rpm` | 5033.570 | 60.0% |
+| `temp_softbake` | 92.325 | 60.0% |
+| `Ion_Energy` | 32222.259 | 35.0% |
+| `Furnace_Temp` | 910.000 | 58.0% |
 
 - 기본값은 **창 안에서 실제 관측된 값들의 중앙값**이다.
   전체 중앙값을 경계로 자르면 슬라이더가 끝에 붙어버리므로 이렇게 잡는다.
@@ -471,9 +486,8 @@ FAB_DATA=/경로/merged_all_processes_derived.csv uvicorn app:app --port 8000
 
 | 변수 | 소속 공정 |
 |---|---|
-| `Ox_Temp` · `Ox_ppm` | 산화 |
-| `spin3_rpm` | Photo Soft Bake |
-| `Furnace_Temp` | 이온 주입 |
+| `temp_HMDS_bake` · `spin3_rpm` · `temp_softbake` | Photo Soft Bake |
+| `Ion_Energy` · `Furnace_Temp` | 이온 주입 |
 
 | 위치 | 표시 |
 |---|---|
@@ -482,7 +496,7 @@ FAB_DATA=/경로/merged_all_processes_derived.csv uvicorn app:app --port 8000
 | History | Wafer 전체 이탈 건수 |
 | 상세 | 변수명 · 실제값 · 벗어난 경계를 항목별로 나열 |
 
-리소·식각은 윈도우 변수가 없으므로 느낌표가 뜨지 않는다.
+산화·리소·식각은 윈도우 변수가 없으므로 느낌표가 뜨지 않는다.
 
 ### 속도 조절
 

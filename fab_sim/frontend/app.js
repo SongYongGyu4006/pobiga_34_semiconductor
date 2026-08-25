@@ -270,9 +270,14 @@ function buildParam(p) {
   }
 
   const dec = decimals(p.step);
+  // Process Window 가 걸린 파라미터는 배지로 알린다 (슬라이더 범위가 창으로 제한됨)
+  const winBadge = p.window
+    ? `<span class="win" title="공정 윈도우 ${fmt(p.window.min, dec)} ~ ${fmt(p.window.max, dec)}">PW</span>`
+    : "";
   wrap.innerHTML = `
     <div class="param-label">
       <span class="param-name">${p.name}</span>
+      ${winBadge}
       <span class="mod">MOD</span>
     </div>
     <div class="param-ctrl">
