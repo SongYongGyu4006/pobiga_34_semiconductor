@@ -270,7 +270,8 @@ function buildParam(p) {
   }
 
   const dec = decimals(p.step);
-  // Process Window 가 걸린 파라미터는 배지로 알린다 (슬라이더 범위가 창으로 제한됨)
+  // Process Window 를 쓰지 않으므로 배지는 뜨지 않는다.
+  // schema 에 window 가 다시 생기면 자동으로 표시된다.
   const winBadge = p.window
     ? `<span class="win" title="공정 윈도우 ${fmt(p.window.min, dec)} ~ ${fmt(p.window.max, dec)}">PW</span>`
     : "";

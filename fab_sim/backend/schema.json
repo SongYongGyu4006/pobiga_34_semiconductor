@@ -207,15 +207,9 @@
           "data_min": 190.934,
           "data_max": 209.755,
           "step": 0.05,
-          "window": {
-            "min": 199.252,
-            "max": 204.353,
-            "n_in_window": 8457,
-            "coverage": 55.0
-          },
-          "min": 199.252,
-          "max": 204.353,
-          "default": 201.657
+          "min": 190.934,
+          "max": 209.755,
+          "default": 200.553
         },
         {
           "key": "time_HMDS_bake",
@@ -304,15 +298,9 @@
           "data_min": 4814.372,
           "data_max": 5194.329,
           "step": 1,
-          "window": {
-            "min": 4976.007,
-            "max": 5101.35,
-            "n_in_window": 9223,
-            "coverage": 60.0
-          },
-          "min": 4976.007,
-          "max": 5101.35,
-          "default": 5033.57
+          "min": 4814.372,
+          "max": 5194.329,
+          "default": 5019.7915
         },
         {
           "key": "PR_amount",
@@ -336,15 +324,9 @@
           "data_min": 86.23,
           "data_max": 96.774,
           "step": 0.05,
-          "window": {
-            "min": 91.225,
-            "max": 93.561,
-            "n_in_window": 9229,
-            "coverage": 60.0
-          },
-          "min": 91.225,
-          "max": 93.561,
-          "default": 92.325
+          "min": 86.23,
+          "max": 96.774,
+          "default": 92.05
         },
         {
           "key": "time_softbake",
@@ -636,15 +618,9 @@
           "data_min": 29604.103,
           "data_max": 33675.751,
           "step": 50,
-          "window": {
-            "min": 31982.453,
-            "max": 32302.259,
-            "n_in_window": 5381,
-            "coverage": 35.0
-          },
-          "min": 31982.453,
-          "max": 32302.259,
-          "default": 32222.259
+          "min": 29604.103,
+          "max": 33675.751,
+          "default": 32200.397
         },
         {
           "key": "Ion_Temp",
@@ -668,15 +644,9 @@
           "data_min": 854.0,
           "data_max": 944.0,
           "step": 0.5,
-          "window": {
-            "min": 898.0,
-            "max": 924.0,
-            "n_in_window": 8912,
-            "coverage": 58.0
-          },
-          "min": 898.0,
-          "max": 924.0,
-          "default": 910.0
+          "min": 854.0,
+          "max": 944.0,
+          "default": 904.0
         },
         {
           "key": "RTA_Temp",

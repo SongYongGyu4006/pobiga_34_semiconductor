@@ -134,8 +134,8 @@ function renderLine(s) {
         ${st.chambers.map(c => chamberCell(c, st)).join("")}
       </div>
       ${st.pending.length ? `<div class="queue">${
-        st.pending.map(w => `<span class="qchip ${w.out_of_window ? "oow" : ""}
-          ${w.id === selected ? "sel" : ""}" data-w="${w.id}">W${pad(w.num)}</span>`).join("")
+        st.pending.map(w => `<span class="qchip ${w.id === selected ? "sel" : ""}"
+          data-w="${w.id}">W${pad(w.num)}</span>`).join("")
       }</div>` : ""}
     </div>`).join("");
 
@@ -163,7 +163,7 @@ function chamberCell(c, st) {
   const run = c.status === "RUNNING" || c.status === "CLOSING";
   const off = c.enabled === false;
   const sel = run && c.wafer === selected;
-  const oow = run && c.out_of_window > 0;
+  const oow = false;                 // 공정 윈도우 미사용
   const toggle = st.recommend
     ? `<button class="chpow" data-stage="${st.id}" data-ch="${c.chamber}"
                data-en="${off ? 1 : 0}"
@@ -194,7 +194,7 @@ function renderHistory(s) {
       <span class="h-legend">추천 경로 · 예상 수율 / 실제 기록 경로 대비 개선폭</span>
     </li>` + s.history.map(h => `
     <li data-w="${h.id}" class="${h.id === selected ? "sel" : ""}">
-      <span class="h-w">W${pad(h.num)}${h.out_of_window ? '<em class="oow-dot">!</em>' : ""}</span>
+      <span class="h-w">W${pad(h.num)}</span>
       <span class="h-paths">
         <b>${h.path || "—"}</b>
         ${h.base_path ? `<em>실제 ${h.base_path}</em>` : ""}
@@ -251,7 +251,7 @@ async function showDetail(wid) {
       <p class="d-note">같은 공정조건에 챔버만 바꿔 같은 모델로 평가한 값이다.
         실측 수율과 직접 비교하면 모델 오차가 섞이므로 모델끼리 비교한다.</p>` : ""}
 
-    ${d.out_of_window.length ? `
+    ${(d.out_of_window || []).length ? `
       <p class="d-title warn">공정 윈도우 이탈 ${d.out_of_window.length}건</p>
       <ul class="d-oow">
         ${d.out_of_window.map(o => `
@@ -260,7 +260,7 @@ async function showDetail(wid) {
               <em>${o.side === "low" ? "하한" : "상한"} ${
                 o.side === "low" ? o.min : o.max} ${o.side === "low" ? "미만" : "초과"}</em>
           </li>`).join("")}
-      </ul>` : `<p class="d-title ok">공정 윈도우 전 항목 충족</p>`}
+      </ul>` : ""}
 
     ${fcBlock(d)}
 

@@ -90,6 +90,8 @@ class MonitorEngine:
         self.n_rec = sum(1 for l in self.line if l["recommend"])
 
         # Process Window (공정조건이 권장 구간을 벗어났는지 판정)
+        # Process Window 를 쓰지 않으므로 비어 있다.
+        # schema 에 window 가 다시 생기면 자동으로 판정이 살아난다.
         self.windows = {p["key"]: {"name": p["name"], "unit": p.get("unit", ""),
                                    "min": p["window"]["min"], "max": p["window"]["max"],
                                    "stage": st["id"], "stage_name": st["name"]}
