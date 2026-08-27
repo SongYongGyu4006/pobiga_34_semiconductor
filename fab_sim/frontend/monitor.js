@@ -136,7 +136,6 @@ function render(s) {
 
   renderLine(s);
   renderHistory(s);
-  if (routeStage && !routeBusy && timer) refreshRoutes();
   markSelected();
 }
 
@@ -227,7 +226,9 @@ function renderRoutes(r) {
   const names = r.stage_names.slice(k);
 
   sum.innerHTML = `
-    <span class="rs-label">조합 평균 예상 수율</span>
+    <span class="rs-label">조합 평균 예상 수율
+      <em class="rs-tick">tick ${state ? state.tick : "-"} 기준</em>
+      <b class="rs-redo">다시 계산</b></span>
     <b class="rs-val">${r.avg_yield.toFixed(2)}<em>%</em></b>
     <span class="rs-note">세 Wafer 를 함께 놓고 챔버가 겹치지 않는 조합 중
       합이 가장 큰 배정</span>`;
@@ -255,6 +256,11 @@ function renderRoutes(r) {
 
   box.querySelectorAll(".rcard").forEach(el =>
     el.onclick = () => showDetail(el.dataset.w));
+
+  // 자동 갱신은 하지 않는다. 경로 계산은 1초 가까이 걸려
+  // 매 틱 반복하면 라인 진행이 밀린다. 필요할 때만 다시 계산한다.
+  const redo = sum.querySelector(".rs-redo");
+  if (redo) redo.onclick = e => { e.stopPropagation(); showRoutes(routeStage); };
 }
 
 /* 다음 공정의 챔버 후보 점수 (선택된 것 강조) */
@@ -554,15 +560,6 @@ function fcBlock(d) {
 }
 
 /* 선택한 Wafer 를 라인·대기열·History 에서 즉시 강조한다 */
-let lastRouteAt = 0;
-async function refreshRoutes() {
-  if (Date.now() - lastRouteAt < 1200) return;
-  lastRouteAt = Date.now();
-  routeBusy = true;
-  try { renderRoutes(await get(`/api/monitor/stage/${routeStage}/routes`)); }
-  finally { routeBusy = false; }
-}
-
 function markSelected() {
   document.querySelectorAll(".chcell, .qchip, .hist li[data-w]").forEach(el =>
     el.classList.toggle("sel", el.dataset.w === selected));

@@ -499,3 +499,14 @@
   padding:2px 7px;border-radius:3px;background:#fff;
 }
 .lstage-head:hover .rbtn,.rbtn.on{background:var(--a-800);color:#fff;border-color:var(--a-800)}
+
+/* 경로 계산 시점 · 다시 계산 */
+.rs-tick{
+  font-style:normal;font-family:var(--font-h);font-size:9.5px;font-weight:600;
+  color:var(--n-600);margin-left:6px;
+}
+.rs-redo{
+  float:right;font-family:var(--font-h);font-size:10px;font-weight:700;
+  color:var(--a-800);border-bottom:1px solid var(--a-500);cursor:pointer;
+}
+.rs-redo:hover{color:var(--neg);border-color:var(--neg)}
