@@ -534,3 +534,78 @@ input[type=range]::-moz-range-track{background:transparent}
 .topbar a.btn{text-decoration:none;display:inline-block}
 .topbar .btn-mon{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.55)}
 .topbar .btn-mon:hover{background:rgba(255,255,255,.26)}
+
+/* ── 공정별 예측 결과 : 변화 강조 ─────────────────────── */
+.summary li{grid-template-columns:22px minmax(0,1fr) auto;transition:background .2s}
+.summary .s-out{display:flex;align-items:baseline;gap:5px;justify-self:end}
+.s-delta{
+  font-family:var(--font-h);font-size:11px;font-weight:700;
+  font-variant-numeric:tabular-nums;min-width:44px;text-align:right;color:transparent;
+}
+.s-delta.up{color:var(--a-800)}
+.s-delta.down{color:var(--neg)}
+
+@keyframes sflash{
+  0%{background:var(--a-100)}
+  100%{background:transparent}
+}
+.summary li.flash{animation:sflash .55s ease-out}
+
+/* 사이드바에서 항상 보이도록 */
+.panel-summary{position:sticky;top:0}
+
+/* ── 상단 고정 결과 띠 ────────────────────────────────── */
+.outrail{
+  position:sticky;top:50px;z-index:18;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) 1.25fr;gap:1px;
+  background:var(--divider);
+  border-bottom:1px solid var(--divider);
+}
+.rail-item{
+  background:#fff;padding:8px 12px 7px;min-width:0;
+  display:flex;flex-direction:column;gap:1px;transition:background .2s;
+}
+.rail-name{
+  font-size:11px;font-weight:600;color:var(--n-600);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rail-val{display:flex;align-items:baseline;gap:3px}
+.rail-val b{
+  font-family:var(--font-h);font-size:20px;font-weight:700;line-height:1.1;
+  color:var(--a-800);font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+}
+.rail-val em{font-style:normal;font-family:var(--font-h);font-size:11px;font-weight:600;color:var(--n-600)}
+.rail-delta{
+  font-family:var(--font-h);font-size:11.5px;font-weight:700;height:15px;
+  font-variant-numeric:tabular-nums;color:transparent;
+}
+.rail-delta.up{color:var(--a-800)}
+.rail-delta.down{color:var(--neg)}
+
+.rail-yield{background:var(--a-800)}
+.rail-yield .rail-name{color:var(--a-100)}
+.rail-yield .rail-val b{color:#fff;font-size:24px}
+.rail-yield .rail-val em{color:var(--a-100)}
+.rail-yield .rail-delta.up{color:#8FE9DC}
+.rail-yield .rail-delta.down{color:#FFB4AC}
+
+@keyframes railflash{0%{background:var(--a-100)}100%{background:#fff}}
+@keyframes railflashY{0%{background:var(--a-600)}100%{background:var(--a-800)}}
+.rail-item.flash{animation:railflash .55s ease-out}
+.rail-item.rail-yield.flash{animation:railflashY .55s ease-out}
+
+@media (max-width:1080px){
+  .outrail{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+/* 상단 띠 대비 강화 */
+.outrail{
+  background:var(--n-200);
+  box-shadow:0 2px 6px rgba(0,0,0,.06);
+  border-bottom:1px solid var(--n-300);
+}
+.rail-item{background:#fff;padding:9px 13px 8px}
+.rail-name{font-size:11.5px;font-weight:600;color:var(--n-700)}
+.rail-val b{font-size:21px}
+.rail-yield{background:var(--a-800)}
+.rail-yield .rail-val b{font-size:25px}

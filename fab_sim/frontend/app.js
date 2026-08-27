@@ -27,6 +27,8 @@ let lastStage = null;           // 마지막으로 조절한 공정
 let routeTimer = null;
 let routeInflight = null;
 let lastRoute = null;
+let prevOut = {};               // 직전 예측값 (바뀐 항목 강조용)
+let prevRail = {};
 
 // ------------------------------------------------------------------ 초기화
 async function init() {
@@ -37,6 +39,7 @@ async function init() {
   params = { ...boot.params };
 
   renderStages();
+  renderRail();
 
   baselineYield = boot.prediction.yield.value;
   baselineDefect = boot.prediction.target.value;
@@ -54,6 +57,23 @@ async function init() {
   document.getElementById("opt-max").onclick = () => optimize("max");
   document.getElementById("opt-min").onclick = () => optimize("min");
   scheduleRoute();
+}
+
+/* 스크롤과 무관하게 항상 보이는 상단 결과 띠 */
+function renderRail() {
+  const items = allOutputs().map(o => `
+    <div class="rail-item" data-rail="${o.key}">
+      <span class="rail-name">${o.name}</span>
+      <span class="rail-val"><b data-rv="${o.key}">--</b><em>${o.unit || ""}</em></span>
+      <span class="rail-delta" data-rd="${o.key}"></span>
+    </div>`).join("");
+
+  document.getElementById("outrail").innerHTML = items + `
+    <div class="rail-item rail-yield" data-rail="yield_rate">
+      <span class="rail-name">최종 수율</span>
+      <span class="rail-val"><b data-rv="yield_rate">--</b><em>%</em></span>
+      <span class="rail-delta" data-rd="yield_rate"></span>
+    </div>`;
 }
 
 function orderedStages() {
@@ -145,12 +165,13 @@ function renderStages() {
 
   // 요약 리스트 — 모든 출력 + 파생값
   document.getElementById("summary-list").innerHTML = allOutputs().map((o, i) => `
-    <li>
+    <li data-row="${o.key}">
       <span class="s-idx">${String(i + 1).padStart(2, "0")}</span>
       <span class="s-name">${o.name}</span>
       <span class="s-out">
         <span class="s-val" data-sum="${o.key}">--</span>
         <span class="s-unit">${o.unit || ""}</span>
+        <span class="s-delta" data-sdelta="${o.key}"></span>
       </span>
     </li>`).join("");
 }
@@ -535,7 +556,7 @@ function renderRoute(r) {
       + `${r.locked_stages.length ? r.locked_stages.map(shortStage).join(" · ") + " 고정 · " : ""}`
       + `${r.search_stages.map(shortStage).join(" · ")} 재탐색 · 조합 ${r.sets_evaluated}개`);
 
-  set("#route-mode", fixed ? "확정 경로" : "모델 탐색");
+  set("#route-mode", fixed ? "확정 경로" : "실시간 탐색");
 
   drawRouteMap(r, best);
 
@@ -650,19 +671,39 @@ function applyPrediction(data) {
     set(`[data-sum="${o.key}"]`, v);
 
     const b = baselineOut[o.key];
+    const d = typeof b === "number" ? o.value - b : null;
+    const flat = d === null || Math.abs(d) < Math.max(Math.abs(b), 1) * 1e-6;
+
     const el = document.querySelector(`[data-delta="${o.key}"]`);
-    if (el && typeof b === "number") {
-      const d = o.value - b;
-      const flat = Math.abs(d) < Math.max(Math.abs(b), 1) * 1e-6;
+    if (el && d !== null) {
       el.className = "delta " + (flat ? "" : d > 0 ? "up" : "down");
       el.textContent = flat ? "동일" : `${d > 0 ? "+" : "−"}${fmt(Math.abs(d), 2)}`;
     }
+
+    // 요약 패널 : 증감 표시 + 값이 바뀌면 잠깐 강조
+    const sd = document.querySelector(`[data-sdelta="${o.key}"]`);
+    if (sd && d !== null) {
+      sd.className = "s-delta " + (flat ? "" : d > 0 ? "up" : "down");
+      sd.textContent = flat ? "" : `${d > 0 ? "▲" : "▼"}${fmt(Math.abs(d), 2)}`;
+    }
+    const row = document.querySelector(`[data-row="${o.key}"]`);
+    if (row && prevOut[o.key] !== undefined && prevOut[o.key] !== o.value) {
+      row.classList.remove("flash");
+      void row.offsetWidth;
+      row.classList.add("flash");
+    }
+    setRail(o.key, o.value, d, flat, 2);
+    prevOut[o.key] = o.value;
   }));
 
   Object.values(data.derived || {}).forEach(d =>
     set(`[data-derived="${d.key}"]`, fmt(d.value, 1)));
 
   const y = data.yield;
+  if (baselineYield !== null) {
+    const dy = y.value - baselineYield;
+    setRail("yield_rate", y.value, dy, Math.abs(dy) < 0.005, 2);
+  }
   set("#yield-num", fmt(y.value, 2));
   document.getElementById("yield-fill").style.width = `${y.ratio * 100}%`;
   updateDelta(y.value);
@@ -671,6 +712,24 @@ function applyPrediction(data) {
   set("#defect-num", fmt(t.value, 0));
   set("#defect-base", `기본값 ${fmt(baselineDefect, 0)}개 / 전체 ${t.total_dies}`);
   set("#sigma-num", processSigma().toFixed(2));
+}
+
+/* 상단 띠 갱신 : 값 + 증감 + 변화 시 순간 강조 */
+function setRail(key, value, delta, flat, dec) {
+  const v = document.querySelector(`[data-rv="${key}"]`);
+  const d = document.querySelector(`[data-rd="${key}"]`);
+  const box = document.querySelector(`[data-rail="${key}"]`);
+  if (v) v.textContent = fmt(value, dec);
+  if (d) {
+    d.className = "rail-delta " + (flat ? "" : delta > 0 ? "up" : "down");
+    d.textContent = flat ? "" : `${delta > 0 ? "▲" : "▼"}${fmt(Math.abs(delta), dec)}`;
+  }
+  if (box && prevRail[key] !== undefined && prevRail[key] !== value) {
+    box.classList.remove("flash");
+    void box.offsetWidth;
+    box.classList.add("flash");
+  }
+  prevRail[key] = value;
 }
 
 function set(sel, text) {
@@ -743,6 +802,7 @@ function reset() {
   params = { ...defaults };
   avail = {};
   previewLane = 0;
+  prevOut = {}; prevRail = {};
   renderStages();
   document.getElementById("yield-base").textContent =
     `기본값 ${fmt(baselineYield, 2)}%`;

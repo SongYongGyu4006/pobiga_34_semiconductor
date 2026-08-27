@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=90">
+<link rel="stylesheet" href="/static/style.css?v=113">
 </head>
 <body>
 
@@ -24,6 +24,8 @@
     <button id="reset-btn" class="btn">기본값으로</button>
   </div>
 </header>
+
+<div class="outrail" id="outrail"><!-- JS가 채움 --></div>
 
 <main class="layout">
   <section id="stages" class="stages"><!-- JS가 채움 --></section>
@@ -58,6 +60,12 @@
       </div>
     </div>
 
+    <div class="panel panel-summary">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="kicker">공정별 예측 결과</span>
+      <ul id="summary-list" class="summary"></ul>
+    </div>
+
     <div class="panel panel-route">
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
       <span class="kicker">챔버 최적 경로 조합 <b class="route-mode" id="route-mode">—</b></span>
@@ -83,17 +91,12 @@
       <p class="route-foot" id="route-foot">—</p>
     </div>
 
-    <div class="panel panel-summary">
-      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-      <span class="kicker">공정별 예측 결과</span>
-      <ul id="summary-list" class="summary"></ul>
-    </div>
 
   </aside>
 </main>
 
 <div id="loading" class="loading hidden">계산 중</div>
 
-<script src="/static/app.js?v=90"></script>
+<script src="/static/app.js?v=113"></script>
 </body>
 </html>

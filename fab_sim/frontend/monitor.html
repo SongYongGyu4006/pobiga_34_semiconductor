@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=90">
-<link rel="stylesheet" href="/static/monitor.css?v=90">
+<link rel="stylesheet" href="/static/style.css?v=200">
+<link rel="stylesheet" href="/static/monitor.css?v=200">
 </head>
 <body class="mon">
 
@@ -19,8 +19,16 @@
     <span class="brand-sub">LIVE LINE MONITOR</span>
   </div>
   <div class="topbar-right">
-    <label class="lot-pick">LOT
-      <select id="lot-select"></select>
+    <label class="lot-pick">날짜
+      <select id="date-select"></select>
+    </label>
+    <label class="lot-pick">투입
+      <select id="limit-select">
+        <option value="15">15장</option>
+        <option value="30" selected>30장</option>
+        <option value="54">54장</option>
+        <option value="0">전량</option>
+      </select>
     </label>
     <button id="btn-start" class="btn">투입</button>
     <button id="btn-play" class="btn">시작</button>
@@ -52,11 +60,22 @@
     </div>
   </section>
 
+  <section class="routepane" id="routepane">
+    <div class="panel panel-route">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="kicker">챔버 최적 경로 조합 <b class="rp-stage" id="rp-stage">—</b></span>
+      <p class="rp-hint" id="rp-hint">왼쪽에서 공정 이름을 클릭하십시오.</p>
+      <div class="rp-sum hidden" id="rp-sum"></div>
+      <div id="rp-cards"></div>
+    </div>
+  </section>
+
   <aside class="mon-side">
     <div class="panel panel-yield">
       <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
-      <span class="kicker">LOT 생산 현황</span>
+      <span class="kicker">생산 현황</span>
       <div class="lot-name" id="lot-name">—</div>
+      <p class="day-sub" id="day-sub">—</p>
       <div class="prog-bar" title="채워진 부분 = 완료된 Wafer 비율">
         <div id="prog-fill" class="prog-fill"></div>
       </div>
@@ -79,6 +98,6 @@
   </aside>
 </main>
 
-<script src="/static/monitor.js?v=90"></script>
+<script src="/static/monitor.js?v=200"></script>
 </body>
 </html>

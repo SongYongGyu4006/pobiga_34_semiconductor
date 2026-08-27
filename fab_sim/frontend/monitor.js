@@ -16,12 +16,18 @@ let selected = null;
 let overlay = false;          // 완료 경로 겹쳐보기
 let busy = false;             // 요청 중복 방지
 let lastDetail = null;
-let precise = {};             // {wafer_id: 정밀 예측 결과}
+let fcCache = null;             // {wid, stage_idx, chamber, forecast} 예상 경로 캐시
+let lastDetailAt = 0;           // 상세 갱신 간격 제한용
+let detailBusy = false;
+let routeStage = null;          // 경로를 보고 있는 공정
+let routeBusy = false;
+let routeData = null;
+const CH_COLORS = ["#0E8C7E", "#E8814A", "#3F7AC4"];   // Ch1 / Ch2 / Ch3
 
 // ------------------------------------------------------------------ 초기화
 async function init() {
   const s = await get("/api/monitor/state");
-  fillLots(s.lots, s.lot);
+  fillDates(s.dates, s.date, s);
   render(s);
 
   document.getElementById("btn-start").onclick = start;
@@ -33,10 +39,10 @@ async function init() {
   };
 }
 
-function fillLots(lots, cur) {
-  const sel = document.getElementById("lot-select");
-  sel.innerHTML = (lots || []).map(l =>
-    `<option value="${l}" ${String(l) === String(cur) ? "selected" : ""}>${l}</option>`).join("");
+function fillDates(dates, cur) {
+  const sel = document.getElementById("date-select");
+  sel.innerHTML = (dates || []).map(d =>
+    `<option value="${d}" ${d === cur ? "selected" : ""}>${d}</option>`).join("");
 }
 
 async function get(url) {
@@ -54,20 +60,28 @@ async function post(url, body) {
 async function start() {
   stopPlay();
   busy = false;
-  precise = {};
-  const lot = Number(document.getElementById("lot-select").value);
+  const date = document.getElementById("date-select").value;
+  const limit = Number(document.getElementById("limit-select").value);
   selected = null;
-  render(await post("/api/monitor/start", { lot, limit: 27 }));
+  fcCache = null;
+  routeStage = null; routeData = null;
+  document.getElementById("rp-stage").textContent = "—";
+  document.getElementById("rp-hint").textContent = "왼쪽에서 공정 이름을 클릭하십시오.";
+  document.getElementById("rp-hint").classList.remove("hidden");
+  document.getElementById("rp-sum").classList.add("hidden");
+  document.getElementById("rp-cards").innerHTML = "";
+  render(await post("/api/monitor/start", { date, limit }));
 }
 
 async function tick(n) {
   if (busy) return;                 // 앞 요청이 끝나기 전에는 보내지 않는다
-  precise = {};                     // 라인이 움직이면 정밀 예측은 무효
   busy = true;
   try {
     render(await post("/api/monitor/tick", { n }));
     if (state && !state.running) stopPlay();
-    if (selected) showDetail(selected);
+    if (selected && !detailBusy && Date.now() - lastDetailAt > 500) {
+      showDetail(selected, true);
+    }
   } finally { busy = false; }
 }
 
@@ -86,7 +100,12 @@ function stopPlay() {
 function render(s) {
   state = s;
   document.getElementById("tick-badge").textContent = `tick ${s.tick}`;
-  document.getElementById("lot-name").textContent = s.lot == null ? "—" : `LOT ${s.lot}`;
+  document.getElementById("lot-name").textContent = s.date || "—";
+  const info = s.day_info || {};
+  document.getElementById("day-sub").textContent = s.date
+    ? `Lot ${(s.day_lots || []).join(" · ")}  ·  투입 ${s.summary.total}장`
+      + (s.day_total && s.day_total !== s.summary.total ? ` / 그날 전체 ${s.day_total}장` : "")
+    : "날짜를 고르고 투입을 누르십시오";
 
   const m = s.summary;
   document.getElementById("prog-fill").style.width = `${m.progress}%`;
@@ -117,15 +136,17 @@ function render(s) {
 
   renderLine(s);
   renderHistory(s);
+  if (routeStage && !routeBusy && timer) refreshRoutes();
   markSelected();
 }
 
 function renderLine(s) {
   document.getElementById("line-stages").innerHTML = s.stages.map((st, i) => `
     <div class="lstage">
-      <div class="lstage-head">
+      <div class="lstage-head ${routeStage === st.id ? "picked" : ""}" data-stage="${st.id}">
         <span class="lstage-idx">${String(i + 1).padStart(2, "0")}</span>
         <span class="lstage-name">${st.name}</span>
+        <span class="rbtn ${routeStage === st.id ? "on" : ""}">경로</span>
         ${st.recommend ? "" : `<span class="link-badge">${st.linked_to} 연동</span>`}
         <span class="lstage-meta">${st.ticks} tick${
           st.pending.length ? ` · 대기 ${st.pending.length}` : ""}</span>
@@ -135,12 +156,18 @@ function renderLine(s) {
       </div>
       ${st.pending.length ? `<div class="queue">${
         st.pending.map(w => `<span class="qchip ${w.id === selected ? "sel" : ""}"
-          data-w="${w.id}">W${pad(w.num)}</span>`).join("")
+          data-w="${w.id}">W${pad(w.num)}<em>L${w.lot}</em></span>`).join("")
       }</div>` : ""}
     </div>`).join("");
 
   document.querySelectorAll("[data-w]").forEach(el =>
     el.onclick = () => showDetail(el.dataset.w));
+
+  document.querySelectorAll(".lstage-head[data-stage]").forEach(el =>
+    el.onclick = e => {
+      if (e.target.closest(".chpow")) return;
+      showRoutes(el.dataset.stage);
+    });
 
   document.querySelectorAll(".chpow[data-stage]").forEach(btn =>
     btn.onclick = async e => {
@@ -154,9 +181,96 @@ function renderLine(s) {
         });
         if (!r.ok) { alert(r.reason); return; }
         render(r.state);
-        if (selected) showDetail(selected);
+        if (selected && !detailBusy && Date.now() - lastDetailAt > 500) {
+      showDetail(selected, true);
+    }
       } finally { busy = false; }
     });
+}
+
+/* 공정을 누르면 그 공정의 Wafer 들이 앞으로 갈 최적 경로를 카드로 보여준다 */
+async function showRoutes(stageId) {
+  if (routeBusy) return;
+  routeBusy = true;
+  routeStage = stageId;
+  renderLine(state);
+  document.getElementById("rp-hint").textContent = "계산 중…";
+  document.getElementById("rp-hint").classList.remove("hidden");
+  document.getElementById("rp-sum").classList.add("hidden");
+  document.getElementById("rp-cards").innerHTML = "";
+  try {
+    const r = await get(`/api/monitor/stage/${stageId}/routes`);
+    renderRoutes(r);
+  } finally { routeBusy = false; }
+}
+
+function renderRoutes(r) {
+  const hint = document.getElementById("rp-hint");
+  const sum = document.getElementById("rp-sum");
+  const box = document.getElementById("rp-cards");
+
+  if (!r.ok) {
+    document.getElementById("rp-stage").textContent = "";
+    hint.textContent = r.reason;
+    hint.classList.remove("hidden");
+    sum.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  routeData = r;
+  document.getElementById("rp-stage").textContent = r.stage_name;
+  hint.classList.add("hidden");
+  sum.classList.remove("hidden");
+
+  const k = r.stage_index;
+  const names = r.stage_names.slice(k);
+
+  sum.innerHTML = `
+    <span class="rs-label">조합 평균 예상 수율</span>
+    <b class="rs-val">${r.avg_yield.toFixed(2)}<em>%</em></b>
+    <span class="rs-note">세 Wafer 를 함께 놓고 챔버가 겹치지 않는 조합 중
+      합이 가장 큰 배정</span>`;
+
+  box.innerHTML = r.lanes.map((ln, i) => {
+    const col = CH_COLORS[i % CH_COLORS.length];
+    const steps = ln.chambers.slice(k);
+    return `
+    <div class="rcard" style="--rc:${col}" data-w="${ln.id}">
+      <div class="rcard-top">
+        <span class="rc-ch">Ch${ln.chamber}</span>
+        <span class="rc-w">W${pad(ln.num)}<em>L${ln.lot}</em></span>
+        <span class="rc-y">${ln.yield.toFixed(2)}<em>%</em></span>
+      </div>
+      <div class="rc-steps">
+        ${steps.map((ch, j) => `
+          ${j ? '<span class="rc-arrow">→</span>' : ""}
+          <span class="rc-step ${j === 0 ? "now" : ""}">
+            <em>${short(names[j])}</em><b>${ch}</b>
+          </span>`).join("")}
+      </div>
+      ${renderScores(ln, r, k)}
+    </div>`;
+  }).join("");
+
+  box.querySelectorAll(".rcard").forEach(el =>
+    el.onclick = () => showDetail(el.dataset.w));
+}
+
+/* 다음 공정의 챔버 후보 점수 (선택된 것 강조) */
+function renderScores(ln, r, k) {
+  const nextId = r.stage_names.length > k + 1
+    ? Object.keys(ln.scores)[0] : null;
+  const sc = nextId ? ln.scores[nextId] : null;
+  if (!sc) return "";
+  const pick = ln.future[0];
+  return `
+    <div class="rc-scores">
+      <span class="rc-sl">다음 공정 후보</span>
+      ${Object.entries(sc).map(([ch, v]) =>
+        `<span class="rc-sc ${String(ch) === String(pick) ? "on" : ""}">Ch${ch} ${v}%</span>`
+      ).join("")}
+    </div>`;
 }
 
 function chamberCell(c, st) {
@@ -178,6 +292,7 @@ function chamberCell(c, st) {
         ${toggle}
       </div>
       <div class="chwafer">${run ? "W" + pad(c.wafer_num) : "—"}${
+        run && c.lot != null ? `<em class="wlot">L${c.lot}</em>` : ""}${
         oow ? `<em class="oow-dot" title="공정 윈도우 이탈 ${c.out_of_window}건">!</em>` : ""}</div>
       <div class="chbar"><div class="chfill" style="width:${c.progress}%"></div></div>
       <div class="chpct">${run ? c.progress.toFixed(0) + "%" : ""}</div>
@@ -194,7 +309,7 @@ function renderHistory(s) {
       <span class="h-legend">추천 경로 · 예상 수율 / 실제 기록 경로 대비 개선폭</span>
     </li>` + s.history.map(h => `
     <li data-w="${h.id}" class="${h.id === selected ? "sel" : ""}">
-      <span class="h-w">W${pad(h.num)}</span>
+      <span class="h-w">W${pad(h.num)}<em class="wlot">L${h.lot}</em></span>
       <span class="h-paths">
         <b>${h.path || "—"}</b>
         ${h.base_path ? `<em>실제 ${h.base_path}</em>` : ""}
@@ -213,9 +328,36 @@ function renderHistory(s) {
 }
 
 // ------------------------------------------------------------------ 상세
-async function showDetail(wid) {
+async function showDetail(wid, light = false) {
   selected = wid;
-  const d = await get(`/api/monitor/wafer/${wid}`);
+  if (detailBusy) return;
+  detailBusy = true;
+  try {
+    await renderDetail(wid, light);
+  } finally {
+    detailBusy = false;
+    lastDetailAt = Date.now();
+  }
+}
+
+async function renderDetail(wid, light) {
+
+  // 진행률만 갱신할 때는 예상 경로 계산을 건너뛴다 (0.5초 → 즉시)
+  let d = await get(`/api/monitor/wafer/${wid}?forecast=${light ? 0 : 1}`);
+
+  if (!d.ok) { /* 아래에서 처리 */ }
+  else if (light) {
+    const same = fcCache && fcCache.wid === wid
+      && fcCache.stage_idx === d.stage_idx && fcCache.chamber === d.chamber;
+    if (same) {
+      d.forecast = fcCache.forecast;          // 캐시 재사용
+    } else {
+      d = await get(`/api/monitor/wafer/${wid}`);   // 공정이 바뀌었으면 다시 계산
+      fcCache = { wid, stage_idx: d.stage_idx, chamber: d.chamber, forecast: d.forecast };
+    }
+  } else {
+    fcCache = { wid, stage_idx: d.stage_idx, chamber: d.chamber, forecast: d.forecast };
+  }
   const box = document.getElementById("detail");
   document.getElementById("detail-hint").classList.add("hidden");
 
@@ -228,6 +370,7 @@ async function showDetail(wid) {
   box.innerHTML = `
     <div class="d-head">
       <b>W${pad(d.num)}</b>
+      <span class="d-lot">Lot ${d.lot}</span>
       <span class="d-sub">${d.id}</span>
       <span class="d-tag">${d.status === "done" ? "완료"
         : d.status === "running" ? `${d.stage} ${chLabel(d.chamber)} ${d.progress}%`
@@ -291,57 +434,8 @@ async function showDetail(wid) {
       </ul>` : ""}
   `;
 
-  const pb = document.getElementById("fc-precise");
-  if (pb) pb.onclick = () => runPrecise(pb.dataset.w);
-
-  if (precise[d.id]) showPrecise(precise[d.id], d);
-  else if (!timer && d.status !== "done") runPrecise(d.id, true);   // 멈춰 있으면 자동
 }
 
-/* 라인을 실제로 굴려 충돌·점유까지 반영한 예측 */
-async function runPrecise(wid, auto = false) {
-  const btn = document.getElementById("fc-precise");
-  const box = document.getElementById("fc-result");
-  if (btn) { btn.disabled = true; btn.textContent = "점유까지 계산 중…"; }
-  if (box) box.innerHTML = `<div class="fc-load"><i></i><i></i><i></i></div>`;
-
-  const wasPlaying = !!timer;
-  if (!auto) stopPlay();          // 수동 실행이면 라인을 멈춰 결과를 고정
-  try {
-    const r = await get(`/api/monitor/forecast/${wid}`);
-    if (!r.ok) { if (box) box.innerHTML = `<p class="hint">${r.reason}</p>`; return; }
-    precise[wid] = r;
-    if (lastDetail && lastDetail.id === wid) showPrecise(r, lastDetail);
-  } catch (e) {
-    if (box) box.innerHTML = `<p class="hint">계산에 실패했습니다.</p>`;
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "다시 계산"; }
-    if (!auto && wasPlaying) togglePlay();
-  }
-}
-
-function showPrecise(r, d) {
-  const box = document.getElementById("fc-result");
-  if (!box) return;
-  const simple = ((d && d.forecast && d.forecast.steps) || []).map(s => s.chamber).join("→");
-  const exact = r.steps.map(s => s.chamber).join("→");
-  const diff = simple !== exact;
-  box.innerHTML = `
-    <table class="d-cmp fc-cmp">
-      <tr><td>빠른 예상</td><td class="p">${simple || "—"}</td>
-          <td class="y">${d && d.forecast ? d.forecast.final_yield.toFixed(2) + "%" : "—"}</td></tr>
-      <tr><td>정밀 예측</td><td class="p">${exact || "—"}</td>
-          <td class="y">${r.final_yield != null ? r.final_yield.toFixed(2) + "%" : "—"}</td></tr>
-    </table>
-    <p class="d-note ${diff ? "warn" : ""}">${
-      diff ? "다른 Wafer 와의 챔버 경합 때문에 경로가 달라진다."
-           : "충돌이 없어 빠른 예상과 동일하다."} · ${r.ticks} tick 시뮬레이션</p>`;
-}
-
-/* 경로 트레이스
-   라인 화면은 "지금 어느 챔버가 점유 중인가"를 보여주므로,
-   한 Wafer 의 시간축 경로를 거기에 겹쳐 그리면 서로 다른 시점의 정보가 섞인다.
-   그래서 경로는 별도 미니맵(공정 × 챔버 격자)에 그린다. */
 function drawTrace(d) {
   const names = d.stage_names, opts = d.options;
   const cols = names.length, rows = Math.max(...opts.map(o => o.length));
@@ -456,12 +550,19 @@ function fcBlock(d) {
             <span class="co-p">${c.path}</span>
           </li>`).join("")}
       </ul>` : ""}
-    <p class="d-note">동승 Wafer 와의 중복은 반영했지만, 챔버 점유 시점은 반영하지 않은 예상이다.</p>
-    <button class="fc-btn" id="fc-precise" data-w="${d.id}">챔버 점유까지 반영해 계산</button>
-    <div id="fc-result"></div>`;
+    <p class="d-note">진입 시점에 다시 계산되므로 실제 배정과 달라질 수 있다.</p>`;
 }
 
 /* 선택한 Wafer 를 라인·대기열·History 에서 즉시 강조한다 */
+let lastRouteAt = 0;
+async function refreshRoutes() {
+  if (Date.now() - lastRouteAt < 1200) return;
+  lastRouteAt = Date.now();
+  routeBusy = true;
+  try { renderRoutes(await get(`/api/monitor/stage/${routeStage}/routes`)); }
+  finally { routeBusy = false; }
+}
+
 function markSelected() {
   document.querySelectorAll(".chcell, .qchip, .hist li[data-w]").forEach(el =>
     el.classList.toggle("sel", el.dataset.w === selected));

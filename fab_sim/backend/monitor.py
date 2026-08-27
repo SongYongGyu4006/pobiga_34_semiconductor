@@ -52,7 +52,7 @@ class Wafer:
         self.base_target: Optional[float] = None
 
     def brief(self) -> Dict[str, Any]:
-        return {"id": self.id, "num": self.num, "status": self.status,
+        return {"id": self.id, "num": self.num, "lot": self.lot, "status": self.status,
                 "stage_idx": self.stage_idx, "chamber": self.chamber,
                 "progress": round(self.progress, 1),
                 "out_of_window": len(self.out_of_window),
@@ -105,6 +105,17 @@ class MonitorEngine:
                            for d in st.get("derived", [])]
         self.base_ctx = pipeline.defaults()
 
+        # 투입 단위는 '날짜'. 하루에 Lot 이 1~2개 흐르므로 Lot 단위로는
+        # 서로 다른 Lot 이 챔버를 두고 경쟁하는 상황을 재현할 수 없다.
+        self.date_col = "Date" if "Date" in self.df.columns else "Datetime"
+        self.df[self.date_col] = pd.to_datetime(self.df[self.date_col])
+        self.dates = [d.strftime("%Y-%m-%d")
+                      for d in sorted(self.df[self.date_col].unique())]
+        self.day_info = {
+            d.strftime("%Y-%m-%d"): {"wafers": int(len(g)),
+                                     "lots": sorted(int(x) for x in g["Lot_Num"].unique())}
+            for d, g in self.df.groupby(self.date_col)
+        }
         self.lots = sorted(self.df["Lot_Num"].unique().tolist())
         # 틱 진행과 챔버 조작이 동시에 들어오면 같은 Wafer 가 두 슬롯에
         # 배정되어 한 공정을 두 번 끝내는 문제가 생긴다. 상태 변경을 직렬화한다.
@@ -116,6 +127,8 @@ class MonitorEngine:
         if not keep_disabled or not hasattr(self, "disabled"):
             self.disabled: Dict[str, set] = {l["id"]: set() for l in self.line}
         self.lot: Optional[int] = None
+        self.date: Optional[str] = None
+        self.day_lots: List[int] = []
         self.tick_no = 0
         self.queue: List[Wafer] = []
         self.pending: List[List[Wafer]] = [[] for _ in self.line]       # 공정 진입 대기
@@ -153,13 +166,27 @@ class MonitorEngine:
             self._assign_all()
             return {"ok": True, "state": self.state()}
 
-    def start(self, lot: Optional[int] = None, limit: int = 27) -> Dict[str, Any]:
+    def start(self, date: Optional[str] = None, limit: int = 30) -> Dict[str, Any]:
+        """
+        하루치 생산분을 투입한다.
+        limit 이 0 이거나 그날 매수보다 크면 전량 투입한다.
+        """
         with self._lock:
             self.reset()
-            self.lot = int(lot) if lot is not None else int(self.lots[0])
+            self.date = str(date) if date else self.dates[0]
+            if self.date not in self.day_info:
+                self.date = self.dates[0]
 
-            sub = self.df[self.df["Lot_Num"] == self.lot].drop_duplicates("Wafer_Num")
-            sub = sub.sort_values("Wafer_Num").head(limit)
+            sub = self.df[self.df[self.date_col] == pd.Timestamp(self.date)]
+            self.day_total = int(len(sub))
+
+            # 그날 Lot 이 여럿이면 번갈아 뽑아 실제처럼 섞어 투입한다.
+            # (Lot 순으로 자르면 앞 Lot 만 들어가 경쟁 상황이 사라진다)
+            sub = sub.sort_values(["Wafer_Num", "Lot_Num"])
+            if limit and limit > 0:
+                sub = sub.head(limit)
+            self.day_lots = sorted(int(x) for x in sub["Lot_Num"].unique())
+            self.lot = self.day_lots[0] if len(self.day_lots) == 1 else None
 
             for _, row in sub.iterrows():
                 # 스키마 기본값 위에 원본 CSV 의 실제 공정조건을 덮어쓴다
@@ -293,10 +320,7 @@ class MonitorEngine:
         # 이 공정의 Output 예측 (이온은 모델이 없어 건너뛴다)
         outs = {}
         self.pl._derive(w.ctx)
-        light = getattr(self, "light", False)
         for m in stage["models"]:
-            if light and m["id"] in SKIP_FOR_SCORING:
-                continue
             v = float(self.pl.registry[m["id"]].predict(w.ctx))
             w.ctx[m["output"]["key"]] = v
             outs[m["output"]["name"]] = round(v, 3)
@@ -316,11 +340,6 @@ class MonitorEngine:
             self._complete(w)
 
     def _complete(self, w: Wafer) -> None:
-        if getattr(self, "light", False):
-            # 그림자 시뮬레이션에서는 경로만 필요하다
-            w.status = "done"
-            w.stage_idx = len(self.line)
-            return
         res = self.pl.run(w.ctx)
         w.target = res["target"]["value"]
         w.yield_rate = res["yield"]["value"]
@@ -374,81 +393,7 @@ class MonitorEngine:
                     self.running = False
             return self.state()
 
-        # ------------------------------------------------- 정밀 예측 (그림자 시뮬레이션)
-    def _shadow(self, fast_trees: int = 80) -> "MonitorEngine":
-        """
-        모델·스키마는 그대로 공유하고 진행 상태만 복제한 사본을 만든다.
-        (모델 객체는 수 GB 라 deepcopy 하면 안 된다)
-        """
-        sh = MonitorEngine.__new__(MonitorEngine)
-        sh.__dict__.update(self.__dict__)          # 읽기 전용 참조 공유
-        sh._lock = threading.RLock()
-        sh.light = True                            # 불필요한 최종 계산 생략
-
-        # 트리 일부만 쓰는 가벼운 예측기로 교체해 지연을 줄인다
-        if fast_trees:
-            from pipeline import Pipeline as _P
-            reg = {k: (v.subsample(fast_trees) if hasattr(v, "subsample") else v)
-                   for k, v in self.pl.registry.items()}
-            sh.pl = _P(self.schema, reg)
-
-        clones: Dict[str, Wafer] = {}
-        for wid, w in self.wafers.items():
-            c = Wafer(w.id, w.lot, w.num, w.cond)
-            c.ctx = dict(w.ctx)
-            c.stage_idx, c.chamber = w.stage_idx, w.chamber
-            c.progress, c.status = w.progress, w.status
-            c.path = [dict(p) for p in w.path]
-            c.candidates = dict(w.candidates)
-            c.orig_chambers = dict(w.orig_chambers)
-            c.out_of_window = w.out_of_window
-            c.target, c.yield_rate = w.target, w.yield_rate
-            c.base_target, c.base_yield = w.base_target, w.base_yield
-            clones[wid] = c
-
-        sh.wafers = clones
-        sh.queue = []
-        sh.pending = [[clones[x.id] for x in row] for row in self.pending]
-        sh.slots = [[clones[x.id] if x else None for x in row] for row in self.slots]
-        sh.history = []
-        sh.disabled = {k: set(v) for k, v in self.disabled.items()}
-        sh.running = self.running
-        sh.tick_no = self.tick_no
-        return sh
-
-    def forecast_precise(self, wid: str, max_ticks: int = 4000,
-                         fast_trees: int = 80) -> Dict[str, Any]:
-        """
-        현재 상태에서 라인을 그대로 굴려, 선택한 Wafer 가 실제로 어느 챔버를
-        타게 되는지 계산한다. 다른 Wafer 와의 충돌·점유가 모두 반영된다.
-        """
-        with self._lock:
-            src = self.wafers.get(wid)
-            if src is None:
-                return {"ok": False, "reason": "해당 Wafer 를 찾을 수 없습니다."}
-            if src.status == "done":
-                return {"ok": True, "steps": [], "final_yield": src.yield_rate,
-                        "final_target": src.target, "ticks": 0}
-            sh = self._shadow(fast_trees)
-
-        w = sh.wafers[wid]
-        seen = len(w.path)
-        t = 0
-        while w.status != "done" and t < max_ticks and sh.running:
-            sh.tick()
-            t += 1
-
-        # 최종 수율은 원래 모델(전체 트리)로 한 번만 계산한다
-        res = self.pl.run(w.ctx)
-        steps = [{"stage": p["stage"], "stage_id": None,
-                  "chamber": p["chamber"], "scores": {}}
-                 for p in w.path[seen:]]
-        return {"ok": True, "steps": steps, "ticks": t,
-                "final_yield": res["yield"]["value"],
-                "final_target": res["target"]["value"],
-                "completed": w.status == "done"}
-
-    # ------------------------------------------------- 남은 공정 예상 경로
+        # ------------------------------------------------- 남은 공정 예상 경로
     def _forecast(self, w: "Wafer") -> Dict[str, Any]:
         """
         아직 지나지 않은 공정에서 어떤 챔버로 갈지 예측한다.
@@ -546,6 +491,103 @@ class MonitorEngine:
                        for g in group],
         }
 
+    # ------------------------------------------- 공정 단위 최적 경로 조합
+    def stage_routes(self, stage_id: str) -> Dict[str, Any]:
+        """
+        지금 그 공정의 챔버에 들어가 있는 Wafer 들을 한 묶음으로 보고,
+        남은 공정에서 서로 챔버가 겹치지 않는 최적 배정을 계산한다.
+        """
+        with self._lock:
+            if stage_id not in self.stage_ids:
+                return {"ok": False, "reason": "알 수 없는 공정입니다."}
+            si = self.stage_ids.index(stage_id)
+
+            group = [w for w in self.slots[si] if w is not None]
+            if not group:
+                return {"ok": False, "reason": "이 공정에서 진행 중인 Wafer 가 없습니다."}
+
+            n_lane = len(group)
+            ctxs = {}
+            for g in group:
+                c = dict(g.ctx)
+                st = next(x for x in self.pl.stages if x["id"] == self.stage_ids[si])
+                self.pl._derive(c)
+                for m in st["models"]:
+                    c[m["output"]["key"]] = float(self.pl.registry[m["id"]].predict(c))
+                ctxs[g.id] = c
+
+            future = {g.id: [] for g in group}
+            scores = {g.id: {} for g in group}
+
+            for sj in range(si + 1, len(self.line)):
+                key = self.keys[sj]
+                off = self.disabled.get(self.stage_ids[sj], set())
+
+                if not self.line[sj]["recommend"]:
+                    chosen = {g.id: str(ctxs[g.id].get(self.keys[self.line[sj]["mirror_from"]]))
+                              for g in group}
+                    tbl, cand = None, []
+                else:
+                    cand = [c for c in self.options[sj] if c not in off] or list(self.options[sj])
+                    rows = []
+                    for g in group:
+                        for c in cand:
+                            r = dict(ctxs[g.id])
+                            r[key] = c
+                            for k in range(sj + 1, len(self.keys)):
+                                r[self.keys[k]] = REF_CHAMBER
+                            rows.append(r)
+                    y = self.pl.run_frame(rows, skip=SKIP_FOR_SCORING)["yield_rate"].tolist()
+                    tbl = [y[i * len(cand):(i + 1) * len(cand)] for i in range(len(group))]
+
+                    best, best_sum = None, None
+                    k = min(n_lane, len(cand))
+                    for perm in itertools.permutations(range(len(cand)), k):
+                        tot = sum(tbl[i][perm[i]] for i in range(k))
+                        if best_sum is None or tot > best_sum:
+                            best, best_sum = perm, tot
+                    chosen = {group[i].id: (cand[best[i]] if i < k else cand[0])
+                              for i in range(n_lane)}
+
+                stage = next(x for x in self.pl.stages if x["id"] == self.stage_ids[sj])
+                for i, g in enumerate(group):
+                    ch = chosen[g.id]
+                    ctxs[g.id][key] = ch
+                    self.pl._derive(ctxs[g.id])
+                    for m in stage["models"]:
+                        ctxs[g.id][m["output"]["key"]] = float(
+                            self.pl.registry[m["id"]].predict(ctxs[g.id]))
+                    future[g.id].append(str(ch))
+                    if tbl:
+                        scores[g.id][self.stage_ids[sj]] = {
+                            c: round(tbl[i][j], 3) for j, c in enumerate(cand)}
+
+            lanes = []
+            for g in group:
+                past = [str(p["chamber"]) for p in g.path]
+                res = self.pl.run(ctxs[g.id])
+                lanes.append({
+                    "id": g.id, "num": g.num, "lot": g.lot,
+                    "chamber": str(g.chamber),
+                    "progress": round(g.progress, 1),
+                    "chambers": past + [str(g.chamber)] + future[g.id],
+                    "future": future[g.id],
+                    "scores": scores[g.id],
+                    "yield": res["yield"]["value"],
+                })
+            lanes.sort(key=lambda x: self.options[si].index(x["chamber"]))
+
+            return {
+                "ok": True,
+                "stage": stage_id,
+                "stage_index": si,
+                "stage_name": self.stage_names[si],
+                "stage_names": self.stage_names,
+                "options": self.options,
+                "avg_yield": round(sum(l["yield"] for l in lanes) / len(lanes), 3),
+                "lanes": lanes,
+            }
+
     # ------------------------------------------------------------------ 상태
 
     def state(self) -> Dict[str, Any]:
@@ -574,6 +616,7 @@ class MonitorEngine:
                                    "DISABLED" if is_off else "AVAILABLE"),
                         "wafer": w.id if w else None,
                         "wafer_num": w.num if w else None,
+                        "lot": w.lot if w else None,
                         "progress": round(w.progress, 1) if w else 0,
                         "out_of_window": len(w.oow_by_stage.get(c["id"], [])) if w else 0,
                     })
@@ -584,13 +627,19 @@ class MonitorEngine:
                     "disabled": sorted(off),
                     # 대기 중에는 아직 그 공정에 들어간 것이 아니므로 이탈 표시를 하지
                     # 않는다. 챔버에 실제로 진입했을 때만 빨간색으로 뜬다.
-                    "pending": [{"id": x.id, "num": x.num, "out_of_window": 0}
+                    "pending": [{"id": x.id, "num": x.num, "lot": x.lot,
+                                 "out_of_window": 0}
                                 for x in self.pending[si]],
                     "ticks": STAGE_TICKS.get(c["id"], DEFAULT_TICKS),
                 })
 
             return {
                 "running": self.running,
+                "date": self.date,
+                "dates": self.dates,
+                "day_info": self.day_info.get(self.date or "", {}),
+                "day_total": getattr(self, "day_total", 0),
+                "day_lots": self.day_lots,
                 "lot": self.lot,
                 "lots": self.lots,
                 "tick": self.tick_no,
@@ -612,7 +661,7 @@ class MonitorEngine:
                 "wafers": [w.brief() for w in self.wafers.values()],
             }
 
-    def wafer_detail(self, wid: str) -> Dict[str, Any]:
+    def wafer_detail(self, wid: str, forecast: bool = True) -> Dict[str, Any]:
         with self._lock:
             w = self.wafers.get(wid)
             if not w:
@@ -620,6 +669,7 @@ class MonitorEngine:
             return {
                 "ok": True,
                 "id": w.id, "num": w.num, "lot": w.lot, "status": w.status,
+                "stage_idx": w.stage_idx,
                 "out_of_window": w.out_of_window,
                 "stage_ids": self.stage_ids,
                 "stage_names": self.stage_names,
@@ -640,5 +690,6 @@ class MonitorEngine:
                 "gain": (round(w.yield_rate - w.base_yield, 3)
                          if w.base_yield is not None and w.yield_rate is not None
                          else None),
-                "forecast": self._forecast(w),
+                # 예상 경로 계산은 0.4초쯤 걸린다. 진행률만 갱신할 때는 생략한다.
+                "forecast": self._forecast(w) if forecast else None,
             }

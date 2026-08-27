@@ -114,8 +114,8 @@ def optimize(req: OptimizeRequest):
 
 # ---------------------------------------------------------------- 생산 모니터링
 class MonitorStartRequest(BaseModel):
-    lot: int | None = None
-    limit: int = 27
+    date: str | None = None            # 투입할 날짜 (YYYY-MM-DD)
+    limit: int = 30                    # 0 이면 그날 전량
 
 
 class MonitorTickRequest(BaseModel):
@@ -130,7 +130,7 @@ def _need_monitor():
 
 @app.post("/api/monitor/start")
 def monitor_start(req: MonitorStartRequest):
-    return _need_monitor().start(req.lot, req.limit)
+    return _need_monitor().start(req.date, req.limit)
 
 
 @app.post("/api/monitor/tick")
@@ -154,15 +154,16 @@ def monitor_state():
     return _need_monitor().state()
 
 
-@app.get("/api/monitor/forecast/{wid}")
-def monitor_forecast(wid: str):
-    """라인을 그대로 굴려 실제 배정까지 반영한 정밀 예측을 반환한다."""
-    return _need_monitor().forecast_precise(wid)
+@app.get("/api/monitor/stage/{stage_id}/routes")
+def monitor_stage_routes(stage_id: str):
+    """그 공정에 있는 Wafer 들의 남은 최적 경로 조합을 반환한다."""
+    return _need_monitor().stage_routes(stage_id)
 
 
 @app.get("/api/monitor/wafer/{wid}")
-def monitor_wafer(wid: str):
-    return _need_monitor().wafer_detail(wid)
+def monitor_wafer(wid: str, forecast: int = 1):
+    """forecast=0 이면 예상 경로 계산을 건너뛴다 (진행률만 갱신할 때)."""
+    return _need_monitor().wafer_detail(wid, bool(forecast))
 
 
 @app.post("/api/reload")

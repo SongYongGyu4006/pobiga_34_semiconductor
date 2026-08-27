@@ -124,21 +124,13 @@ MIRROR = {"Ion_Chamber": "Etching_Chamber"}
 PROCESS_WINDOW: dict = {}
 
 # ---------------------------------------------------------------------------
-# 데이터 분석으로 확정된 최적 경로 조합.
-#   시뮬레이터는 이 조합을 기본으로 표시하고,
-#   사용 불가 챔버가 생겨 성립하지 않을 때만 모델 기반 탐색으로 대체한다.
-#   yield / sd / wafers 는 윈도우 만족 고유 웨이퍼 174장 기준 실측값.
+# 확정 경로는 사용하지 않는다.
+# 경로 조합은 현재 파라미터로 매번 실시간 탐색한다.
+# 고정값을 다시 쓰려면 아래 형태로 채우면 된다.
+#   {"source": "...", "avg_yield": 91.3,
+#    "lanes": [{"lane": "1", "path": "1-1-1-1", "yield": 90.1}, ...]}
 # ---------------------------------------------------------------------------
-FIXED_ROUTE_SET = {
-    "source": "데이터 분석 · 윈도우 만족 고유 웨이퍼 174장",
-    "avg_yield": 91.338,
-    "note": "경로당 고유 웨이퍼 ≥ 2, 최대 표준편차 ≤ 6 제약에서 평균 수율 최대",
-    "lanes": [
-        {"lane": "1", "path": "1-1-1-1", "yield": 90.150, "sd": 1.990, "wafers": 2},
-        {"lane": "2", "path": "2-3-3-3", "yield": 91.745, "sd": 3.748, "wafers": 3},
-        {"lane": "3", "path": "3-2-2-2", "yield": 92.120, "sd": 5.930, "wafers": 3},
-    ],
-}
+FIXED_ROUTE_SET = None
 
 # 프론트 파라미터명 -> 원본 CSV 컬럼명 (Thin F 는 Etching.csv 에만 존재)
 SOURCE_COL = {"Thin_F1": "Thin F1", "Thin_F2": "Thin F2", "Thin_F3": "Thin F3"}
@@ -273,7 +265,6 @@ def main(merged_path: str, etching_path: str, out_path: str) -> None:
             "generated_from": merged_path,
         },
         "constants": constants,
-        "route_set": FIXED_ROUTE_SET,
         "stages": stages,
         "yield_model": {
             "id": "yield", "pkl": YIELD["pkl"],
@@ -285,6 +276,12 @@ def main(merged_path: str, etching_path: str, out_path: str) -> None:
                        "range": [round(float(y.min()), 3), 100.0]},
         },
     }
+
+    if FIXED_ROUTE_SET:
+        schema["route_set"] = FIXED_ROUTE_SET
+        print("[route] 확정 경로 사용")
+    else:
+        print("[route] 확정 경로 없음 → 실시간 탐색")
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(schema, f, ensure_ascii=False, indent=2)
