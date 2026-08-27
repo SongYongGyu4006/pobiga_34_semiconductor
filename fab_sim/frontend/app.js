@@ -54,8 +54,6 @@ async function init() {
   updateChamberMarkers();
   applyPrediction(boot.prediction);
   document.getElementById("reset-btn").onclick = reset;
-  document.getElementById("opt-max").onclick = () => optimize("max");
-  document.getElementById("opt-min").onclick = () => optimize("min");
   scheduleRoute();
 }
 
@@ -762,43 +760,7 @@ function processSigma() {
   return n ? acc / n * 2.5 : 0;
 }
 
-/* 수율 최대 / 최저 파라미터 탐색 */
-async function optimize(direction) {
-  const btns = [document.getElementById("opt-max"), document.getElementById("opt-min")];
-  btns.forEach(b => b.disabled = true);
-  toggleLoading(true);
-  try {
-    const res = await fetch(`${API}/api/optimize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ params, direction, available: avail }),
-    });
-    const r = await res.json();
-    Object.entries(r.params).forEach(([k, v]) => {
-      if (k in params) params[k] = v;
-    });
-    renderStages();
-    syncMirrors();
-    updateChamberMarkers();
-    applyPrediction(r.prediction);
-    const msg = document.getElementById("opt-msg");
-    msg.classList.remove("hidden");
-    msg.className = "opt-msg " + (direction === "max" ? "up" : "down");
-    msg.textContent =
-      `${direction === "max" ? "최대" : "최저"} 평균 수율 탐색 · `
-      + `${fmt(r.start_yield, 2)}% → ${fmt(r.final_yield, 2)}% `
-      + `(${r.rounds}라운드${r.converged ? " 수렴" : " 미수렴"})`;
-    scheduleRoute();
-  } catch (e) {
-    console.error(e);
-  } finally {
-    btns.forEach(b => b.disabled = false);
-    toggleLoading(false);
-  }
-}
-
 function reset() {
-  document.getElementById("opt-msg").classList.add("hidden");
   params = { ...defaults };
   avail = {};
   previewLane = 0;

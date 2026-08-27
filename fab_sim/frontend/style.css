@@ -609,3 +609,6 @@ input[type=range]::-moz-range-track{background:transparent}
 .rail-val b{font-size:21px}
 .rail-yield{background:var(--a-800)}
 .rail-yield .rail-val b{font-size:25px}
+
+/* 최대·최저 수율 버튼 제거에 따른 잔여 스타일 정리 */
+.opt-msg{display:none}
